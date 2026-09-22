@@ -2,6 +2,7 @@ import os
 import asyncio
 import io
 import sys
+from datetime import datetime, timezone
 import json
 import uuid
 import shutil
@@ -32,6 +33,7 @@ from backend.services.rules import (
 from backend.models import BatchMetadata
 from backend.services.batch import batch_service, get_batch_config
 from backend.fixtures_generator import FIXTURES_DIR, generate_all_fixtures
+from backend.services.event_bus import batch_event_bus
 
 logger = logging.getLogger(__name__)
 
@@ -638,6 +640,15 @@ async def upload_documents_to_batch(
         uploaded_docs.append(doc_meta.model_dump())
 
     batch.status = batch_service.compute_batch_status(batch)
+    for d in uploaded_docs:
+        await batch_event_bus.publish(
+            batch_id=batch_id,
+            event_type="document_queued",
+            status="queued",
+            phase="queued",
+            document_id=d["id"],
+            payload={"filename": d["filename"], "profile": d["profile_id"], "sizeBytes": d["size_bytes"]}
+        )
     return {"uploaded_count": len(uploaded_docs), "documents": uploaded_docs}
 
 @api_router.patch("/batches/{batch_id}/documents/{doc_id}/profile")
@@ -697,6 +708,14 @@ async def cancel_batch_document(batch_id: str, doc_id: str):
     doc.status = "cancelled"
     batch.status = batch_service.compute_batch_status(batch)
     return {"status": "cancelled", "document_id": doc_id}
+    await batch_event_bus.publish(
+        batch_id=batch_id,
+        event_type="document_cancelled",
+        status="cancelled",
+        phase="cancelled",
+        document_id=doc_id,
+        payload={"documentId": doc_id}
+    )
 
 @api_router.post("/batches/{batch_id}/cancel")
 async def cancel_entire_batch(batch_id: str):
@@ -718,6 +737,13 @@ async def cancel_entire_batch(batch_id: str):
                     pass
 
     return {"status": "cancelled", "batch_id": batch_id}
+    await batch_event_bus.publish(
+        batch_id=batch_id,
+        event_type="batch_status_changed",
+        status="cancelled",
+        phase="cancelled",
+        payload={"message": "El lote completo ha sido cancelado por el usuario."}
+    )
 
 @api_router.post("/batches/{batch_id}/analyze")
 async def start_batch_analysis(batch_id: str, payload: Optional[StartBatchAnalysisPayload] = None):
@@ -745,10 +771,25 @@ async def start_batch_analysis(batch_id: str, payload: Optional[StartBatchAnalys
 
     batch.status = "processing"
 
+    await batch_event_bus.publish(
+        batch_id=batch_id,
+        event_type="batch_started",
+        status="processing",
+        phase="batch_analysis_started",
+        payload={"analyzingCount": len(docs_to_analyze)}
+    )
     # Concurrency-controlled execution using semaphore inside batch_service
     tasks = [batch_service.analyze_document_in_batch(doc_id, batch_id) for doc_id in docs_to_analyze]
     await asyncio.gather(*tasks, return_exceptions=True)
 
+    batch_status_after_analysis = batch_service.compute_batch_status(batch)
+    await batch_event_bus.publish(
+        batch_id=batch_id,
+        event_type="batch_status_changed",
+        status=batch_status_after_analysis,
+        phase="awaiting_review",
+        payload={"batchStatus": batch_status_after_analysis}
+    )
     batch.status = batch_service.compute_batch_status(batch)
     return await get_batch_details(batch_id)
 
@@ -780,10 +821,27 @@ async def start_batch_purge(batch_id: str, payload: Optional[StartBatchPurgePayl
         )
 
     batch.status = "processing"
+    await batch_event_bus.publish(
+        batch_id=batch_id,
+        event_type="batch_status_changed",
+        status="processing",
+        phase="batch_purge_started",
+        payload={"purgingCount": len(target_doc_ids)}
+    )
+
     tasks = [batch_service.purge_document_in_batch(doc_id, batch_id) for doc_id in target_doc_ids]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    batch.status = batch_service.compute_batch_status(batch)
+    final_status = batch_service.compute_batch_status(batch)
+    batch.status = final_status
+    await batch_event_bus.publish(
+        batch_id=batch_id,
+        event_type="batch_completed" if "completed" in final_status else "batch_status_changed",
+        status=final_status,
+        phase="completed" if "completed" in final_status else final_status,
+        payload={"batchStatus": final_status}
+    )
+
     return await get_batch_details(batch_id)
 
 @api_router.get("/batches/{batch_id}/audit.json")
@@ -828,5 +886,81 @@ async def download_batch_zip(batch_id: str):
         filename=f"anclora-purgedoc-batch-{batch_id}.zip",
         media_type="application/zip"
     )
+
+@api_router.get("/batches/{batch_id}/events")
+async def stream_batch_events(
+    batch_id: str,
+    session_id: Optional[str] = None,
+    last_event_id: Optional[int] = None
+):
+    """
+    Server-Sent Events (SSE) streaming endpoint for real-time batch progress.
+    Validates batch and session ownership for strict isolation.
+    Replays history if last_event_id is provided.
+    Transmits standard SSE format:
+      id: <sequence>
+      event: <type>
+      data: <json>
+    """
+    batch = session_store.batches.get(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Lote no encontrado.")
+
+    if session_id and batch.session_id != session_id:
+        raise HTTPException(status_code=403, detail="Acceso denegado: el lote no pertenece a esta sesión.")
+
+    queue = batch_event_bus.subscribe(batch_id, last_event_id=last_event_id)
+
+    async def event_generator():
+        try:
+            # Emit initial connection acknowledgment
+            init_event = {
+                "eventId": f"init_{batch_id}",
+                "sequence": 0,
+                "batchId": batch_id,
+                "type": "stream_connected",
+                "status": batch.status,
+                "phase": "connected",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "schemaVersion": 1,
+                "payload": {"batchStatus": batch.status, "documentsCount": len(batch.document_ids)}
+            }
+            yield f"id: 0\nevent: stream_connected\ndata: {json.dumps(init_event)}\n\n"
+
+            while True:
+                try:
+                    # Wait for next event or send heartbeat every 15 seconds
+                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    if event is None:
+                        # Sentinel for queue closure / cleanup
+                        break
+
+                    seq = event.get("sequence", 0)
+                    ev_type = event.get("type", "message")
+                    data_str = json.dumps(event)
+                    yield f"id: {seq}\nevent: {ev_type}\ndata: {data_str}\n\n"
+                except asyncio.TimeoutError:
+                    # Keep-alive heartbeat (no sensitive data)
+                    hb = {
+                        "type": "heartbeat",
+                        "batchId": batch_id,
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    }
+                    yield f": heartbeat {json.dumps(hb)}\n\n"
+        except asyncio.CancelledError:
+            logger.info(f"SSE client disconnected from batch {batch_id}")
+        finally:
+            batch_event_bus.unsubscribe(batch_id, queue)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
 
 app.include_router(api_router)

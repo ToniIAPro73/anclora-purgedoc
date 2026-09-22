@@ -19,6 +19,7 @@ from backend.services.redaction import redaction_engine
 from backend.services.verification import verification_engine
 from backend.services.audit import audit_service
 from backend.services.rules import CustomRuleset, CustomRule
+from backend.services.event_bus import batch_event_bus
 
 logger = logging.getLogger(__name__)
 
@@ -36,12 +37,16 @@ class BatchService:
         self._doc_custom_rulesets: Dict[str, Dict[str, Any]] = {}
         self._batch_custom_rulesets: Dict[str, Dict[str, Any]] = {}
         self._batch_semaphores: Dict[str, asyncio.Semaphore] = {}
+        self._active_workers: Dict[str, int] = {} # batch_id -> count of running workers
 
     def get_semaphore(self, batch_id: str) -> asyncio.Semaphore:
         config = get_batch_config()
         if batch_id not in self._batch_semaphores:
             self._batch_semaphores[batch_id] = asyncio.Semaphore(config["max_concurrent"])
         return self._batch_semaphores[batch_id]
+
+    def get_active_workers_count(self, batch_id: str) -> int:
+        return self._active_workers.get(batch_id, 0)
 
     def set_batch_ruleset(self, batch_id: str, custom_rules: Optional[List[CustomRule]], ruleset_id: str = "custom_ruleset", version: str = "1.0.0"):
         if custom_rules:
@@ -82,7 +87,7 @@ class BatchService:
         draft | processing | awaiting_review | completed_verified | completed_with_errors | cancelled
         Strict rules:
         - completed_verified ONLY if ALL docs are 'verified' (and at least 1 doc exists).
-        - completed_with_errors if any doc is 'verification_failed' or 'error' and others are completed/verified.
+        - completed_with_errors if any doc is 'verification_failed' or 'error' or 'cancelled' and others are completed/verified.
         - awaiting_review if any doc is 'awaiting_review' or 'ready_to_purge' and none currently analyzing/purging.
         - processing if any doc is 'validating', 'analyzing', 'purging', 'verifying', 'queued'.
         - cancelled if batch status was explicitly cancelled.
@@ -121,29 +126,63 @@ class BatchService:
         return batch.status
 
     async def analyze_document_in_batch(self, doc_id: str, batch_id: str):
-        """Single document analysis with controlled batch semaphore concurrency"""
+        """Single document analysis with controlled batch semaphore concurrency and real SSE progress phases"""
         sem = self.get_semaphore(batch_id)
         async with sem:
+            self._active_workers[batch_id] = self._active_workers.get(batch_id, 0) + 1
             doc_meta = session_store.documents.get(doc_id)
             if not doc_meta:
+                self._active_workers[batch_id] = max(0, self._active_workers.get(batch_id, 1) - 1)
                 return
 
             if doc_meta.status == "cancelled":
+                self._active_workers[batch_id] = max(0, self._active_workers.get(batch_id, 1) - 1)
                 return
 
             doc_meta.status = "validating"
+            await batch_event_bus.publish(
+                batch_id=batch_id,
+                event_type="document_status_changed",
+                status="validating",
+                phase="validating",
+                document_id=doc_id,
+                payload={"filename": doc_meta.filename, "activeWorkers": self._active_workers.get(batch_id, 0)}
+            )
+
             paths = session_store.doc_file_paths[doc_id]
             source_file = paths["source"]
             doc_dir = os.path.dirname(source_file)
 
             try:
                 doc_meta.status = "analyzing"
-                if doc_meta.mime_type == "application/pdf":
+                is_pdf = doc_meta.mime_type == "application/pdf"
+                
+                # Phase: extraction
+                await batch_event_bus.publish(
+                    batch_id=batch_id,
+                    event_type="document_status_changed",
+                    status="analyzing",
+                    phase="extracting" if not is_pdf else "extracting_pdf_content",
+                    document_id=doc_id,
+                    payload={"filename": doc_meta.filename}
+                )
+
+                if is_pdf:
                     pages_content, page_count, has_text, is_scanned = document_processor.extract_pdf_content(source_file)
                     doc_meta.page_count = page_count
                     doc_meta.has_text_layer = has_text
                     doc_meta.is_scanned_ocr = is_scanned
                     paths["preview_pdf"] = source_file
+
+                    if is_scanned:
+                        await batch_event_bus.publish(
+                            batch_id=batch_id,
+                            event_type="document_status_changed",
+                            status="analyzing",
+                            phase="ocr_extraction",
+                            document_id=doc_id,
+                            payload={"filename": doc_meta.filename, "isScanned": True}
+                        )
                 else: # DOCX
                     pages_content, page_count, has_text = document_processor.extract_docx_content(source_file)
                     doc_meta.page_count = page_count
@@ -155,7 +194,25 @@ class BatchService:
                 if not has_text:
                     doc_meta.status = "error"
                     doc_meta.error_message = "El documento no contiene texto detectable incluso tras análisis OCR local."
+                    await batch_event_bus.publish(
+                        batch_id=batch_id,
+                        event_type="document_error",
+                        status="error",
+                        phase="extraction_failed",
+                        document_id=doc_id,
+                        payload={"filename": doc_meta.filename, "error": doc_meta.error_message}
+                    )
                     return
+
+                # Phase: NER & regex detection
+                await batch_event_bus.publish(
+                    batch_id=batch_id,
+                    event_type="document_status_changed",
+                    status="analyzing",
+                    phase="ner_detection",
+                    document_id=doc_id,
+                    payload={"filename": doc_meta.filename, "profile": doc_meta.profile_id}
+                )
 
                 ruleset_meta = self.get_doc_ruleset(doc_id, batch_id)
                 custom_rules = ruleset_meta.get("rules") if ruleset_meta else None
@@ -169,20 +226,48 @@ class BatchService:
 
                 session_store.matches[doc_id] = {m.id: m for m in matches}
                 doc_meta.status = "awaiting_review"
+
+                # Publish awaiting_review event
+                await batch_event_bus.publish(
+                    batch_id=batch_id,
+                    event_type="document_awaiting_review",
+                    status="awaiting_review",
+                    phase="awaiting_review",
+                    document_id=doc_id,
+                    payload={
+                        "filename": doc_meta.filename,
+                        "matchesCount": len(matches),
+                        "pendingCount": len(matches),
+                        "activeWorkers": max(0, self._active_workers.get(batch_id, 1) - 1)
+                    }
+                )
             except Exception as e:
                 logger.exception(f"Error analyzing batch document {doc_id}: {e}")
                 doc_meta.status = "error"
                 doc_meta.error_message = f"Error durante análisis: {str(e)}"
+                await batch_event_bus.publish(
+                    batch_id=batch_id,
+                    event_type="document_error",
+                    status="error",
+                    phase="error",
+                    document_id=doc_id,
+                    payload={"filename": doc_meta.filename, "error": doc_meta.error_message}
+                )
+            finally:
+                self._active_workers[batch_id] = max(0, self._active_workers.get(batch_id, 1) - 1)
 
     async def purge_document_in_batch(self, doc_id: str, batch_id: str) -> bool:
-        """Single document purge and fail-closed verification reusing sovereign single-doc engine"""
+        """Single document purge and fail-closed verification reusing sovereign single-doc engine with SSE reporting"""
         sem = self.get_semaphore(batch_id)
         async with sem:
+            self._active_workers[batch_id] = self._active_workers.get(batch_id, 0) + 1
             doc_meta = session_store.documents.get(doc_id)
             if not doc_meta:
+                self._active_workers[batch_id] = max(0, self._active_workers.get(batch_id, 1) - 1)
                 return False
 
             if doc_meta.status == "cancelled":
+                self._active_workers[batch_id] = max(0, self._active_workers.get(batch_id, 1) - 1)
                 return False
 
             paths = session_store.doc_file_paths[doc_id]
@@ -194,6 +279,15 @@ class BatchService:
             approved_matches = [m for m in all_matches if m.status == "accepted"]
 
             doc_meta.status = "purging"
+            await batch_event_bus.publish(
+                batch_id=batch_id,
+                event_type="document_status_changed",
+                status="purging",
+                phase="purging",
+                document_id=doc_id,
+                payload={"filename": doc_meta.filename, "approvedCount": len(approved_matches)}
+            )
+
             ext = Path(source_file).suffix.lower()
             purged_filename = f"purged_{doc_meta.filename}"
             purged_path = os.path.join(doc_dir, purged_filename)
@@ -204,10 +298,26 @@ class BatchService:
                     is_scanned = getattr(doc_meta, "is_scanned_ocr", False)
                     redaction_engine.purge_pdf(source_file, purged_path, approved_matches, is_scanned=is_scanned)
                     doc_meta.status = "verifying"
+                    await batch_event_bus.publish(
+                        batch_id=batch_id,
+                        event_type="document_status_changed",
+                        status="verifying",
+                        phase="verifying",
+                        document_id=doc_id,
+                        payload={"filename": doc_meta.filename}
+                    )
                     passed, failures, v_details = verification_engine.verify_pdf(purged_path, approved_matches, is_scanned=is_scanned)
                 else: # DOCX
                     redaction_engine.purge_docx(source_file, purged_path, approved_matches)
                     doc_meta.status = "verifying"
+                    await batch_event_bus.publish(
+                        batch_id=batch_id,
+                        event_type="document_status_changed",
+                        status="verifying",
+                        phase="verifying",
+                        document_id=doc_id,
+                        payload={"filename": doc_meta.filename}
+                    )
                     passed, failures, v_details = verification_engine.verify_docx(purged_path, approved_matches)
 
                 for m in approved_matches:
@@ -223,7 +333,16 @@ class BatchService:
                 else:
                     paths.pop("purged", None)
 
-                # Generate individual audit (never exposing sensitive text)
+                # Phase: Generating individual audit
+                await batch_event_bus.publish(
+                    batch_id=batch_id,
+                    event_type="document_status_changed",
+                    status=doc_meta.status,
+                    phase="generating_audit",
+                    document_id=doc_id,
+                    payload={"filename": doc_meta.filename, "passed": passed}
+                )
+
                 ruleset_meta = self.get_doc_ruleset(doc_id, batch_id)
                 audit_json = audit_service.generate_audit_json(
                     doc_meta, all_matches, passed, v_details, custom_ruleset_meta=ruleset_meta
@@ -237,13 +356,43 @@ class BatchService:
                 audit_service.generate_audit_pdf(audit_json, audit_pdf_path)
                 paths["audit_pdf"] = audit_pdf_path
 
+                # Publish final document outcome
+                if passed:
+                    await batch_event_bus.publish(
+                        batch_id=batch_id,
+                        event_type="document_verified",
+                        status="verified",
+                        phase="verified",
+                        document_id=doc_id,
+                        payload={"filename": doc_meta.filename, "outputSha256": output_sha}
+                    )
+                else:
+                    await batch_event_bus.publish(
+                        batch_id=batch_id,
+                        event_type="document_verification_failed",
+                        status="verification_failed",
+                        phase="verification_failed",
+                        document_id=doc_id,
+                        payload={"filename": doc_meta.filename}
+                    )
+
                 return passed
             except Exception as e:
                 logger.exception(f"Error purging batch document {doc_id}: {e}")
                 doc_meta.status = "error"
                 doc_meta.error_message = f"Error durante purga: {str(e)}"
                 paths.pop("purged", None)
+                await batch_event_bus.publish(
+                    batch_id=batch_id,
+                    event_type="document_error",
+                    status="error",
+                    phase="error",
+                    document_id=doc_id,
+                    payload={"filename": doc_meta.filename, "error": doc_meta.error_message}
+                )
                 return False
+            finally:
+                self._active_workers[batch_id] = max(0, self._active_workers.get(batch_id, 1) - 1)
 
     def generate_batch_audit_summary(self, batch_id: str) -> Dict[str, Any]:
         """
@@ -353,7 +502,6 @@ class BatchService:
         batch_dir = session_store.get_batch_dir(batch.session_id, batch_id)
         zip_path = os.path.join(batch_dir, f"anclora-purgedoc-batch-{batch_id}.zip")
 
-        # 1. Generate Batch Audit Summary
         summary_data = self.generate_batch_audit_summary(batch_id)
         batch_audit_json_path = os.path.join(batch_dir, "batch-audit.json")
         with open(batch_audit_json_path, "w", encoding="utf-8") as f:
@@ -363,11 +511,9 @@ class BatchService:
         audit_service.generate_batch_audit_pdf(summary_data, batch_audit_pdf_path)
 
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            # Add batch audit reports
             zip_file.write(batch_audit_json_path, arcname="batch-audit.json")
             zip_file.write(batch_audit_pdf_path, arcname="batch-audit.pdf")
 
-            # Add documents and individual audits
             for doc_id in batch.document_ids:
                 doc = session_store.documents.get(doc_id)
                 if not doc:
@@ -375,15 +521,12 @@ class BatchService:
 
                 paths = session_store.doc_file_paths.get(doc_id, {})
 
-                # Documents folder: ONLY VERIFIED OUTPUTS
                 if doc.status == "verified":
                     purged_path = paths.get("purged")
                     if purged_path and os.path.exists(purged_path):
-                        # Safe arcname without path traversal
                         safe_name = os.path.basename(purged_path)
                         zip_file.write(purged_path, arcname=f"documents/{safe_name}")
 
-                # Audits folder: sanitized individual audits
                 audit_json_path = paths.get("audit_json")
                 if audit_json_path and os.path.exists(audit_json_path):
                     safe_json_name = f"{doc.filename}-audit.json"

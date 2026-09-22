@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { useApp } from "../context/AppContext";
 import {
@@ -18,7 +18,8 @@ import {
   Loader2,
   Filter,
   Eye,
-  Sliders
+  Activity,
+  Radio
 } from "lucide-react";
 
 export const BatchQueueScreen = ({
@@ -33,11 +34,20 @@ export const BatchQueueScreen = ({
 }) => {
   const { t } = useApp();
   const fileInputRef = useRef(null);
+  const eventSourceRef = useRef(null);
+  const lastSequenceRef = useRef(0);
+  const fallbackIntervalRef = useRef(null);
+
   const [filterStatus, setFilterStatus] = useState("all");
   const [isUploading, setIsUploading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isPurging, setIsPurging] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
+
+  // SSE Stream State
+  const [streamConnected, setStreamConnected] = useState(false);
+  const [documentPhases, setDocumentPhases] = useState({}); // docId -> phase string
+  const [activeWorkers, setActiveWorkers] = useState(0);
 
   const limits = batchDetails?.limits || {
     max_documents: 10,
@@ -59,6 +69,118 @@ export const BatchQueueScreen = ({
     if (d.status !== "awaiting_review" && d.status !== "ready_to_purge") return false;
     return d.pending_count === 0;
   });
+
+  // -------------------------------------------------------------
+  // SSE Real-Time Progress Stream with Monotonic Sequence & Last-Event-ID
+  // -------------------------------------------------------------
+  useEffect(() => {
+    if (!batchId) return;
+
+    let isSubscribed = true;
+
+    function connectSSE() {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+
+      const sseUrl = `${backendUrl}/api/batches/${batchId}/events?last_event_id=${lastSequenceRef.current}`;
+      const es = new EventSource(sseUrl);
+      eventSourceRef.current = es;
+
+      es.onopen = () => {
+        if (!isSubscribed) return;
+        setStreamConnected(true);
+        // Clear polling fallback while SSE is healthy
+        if (fallbackIntervalRef.current) {
+          clearInterval(fallbackIntervalRef.current);
+          fallbackIntervalRef.current = null;
+        }
+      };
+
+      es.onerror = () => {
+        if (!isSubscribed) return;
+        setStreamConnected(false);
+        // Setup moderate snapshot fallback polling if disconnected
+        if (!fallbackIntervalRef.current) {
+          fallbackIntervalRef.current = setInterval(() => {
+            onRefreshBatch();
+          }, 3500);
+        }
+      };
+
+      // Handler for typed events
+      const handleEvent = (event) => {
+        if (!isSubscribed) return;
+        try {
+          const parsed = JSON.parse(event.data);
+          const seq = parsed.sequence || 0;
+          if (seq > 0 && seq <= lastSequenceRef.current) {
+            // Ignore duplicate or older event
+            return;
+          }
+          if (seq > 0) {
+            lastSequenceRef.current = seq;
+          }
+
+          const docId = parsed.documentId;
+          const phase = parsed.phase;
+          const workers = parsed.payload?.activeWorkers;
+
+          if (workers !== undefined) {
+            setActiveWorkers(workers);
+          }
+
+          if (docId && phase) {
+            setDocumentPhases((prev) => ({
+              ...prev,
+              [docId]: phase
+            }));
+          }
+
+          // Trigger lightweight state snapshot refresh on major transitions
+          const transitionTypes = [
+            "document_status_changed",
+            "document_awaiting_review",
+            "document_verified",
+            "document_verification_failed",
+            "document_error",
+            "document_cancelled",
+            "batch_status_changed",
+            "batch_completed"
+          ];
+          if (transitionTypes.includes(parsed.type)) {
+            onRefreshBatch();
+          }
+        } catch (e) {
+          console.error("Error processing SSE event:", e);
+        }
+      };
+
+      es.addEventListener("document_status_changed", handleEvent);
+      es.addEventListener("document_awaiting_review", handleEvent);
+      es.addEventListener("document_verified", handleEvent);
+      es.addEventListener("document_verification_failed", handleEvent);
+      es.addEventListener("document_error", handleEvent);
+      es.addEventListener("document_cancelled", handleEvent);
+      es.addEventListener("batch_status_changed", handleEvent);
+      es.addEventListener("batch_completed", handleEvent);
+      es.addEventListener("stream_connected", handleEvent);
+    }
+
+    connectSSE();
+
+    return () => {
+      isSubscribed = false;
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      if (fallbackIntervalRef.current) {
+        clearInterval(fallbackIntervalRef.current);
+        fallbackIntervalRef.current = null;
+      }
+    };
+  }, [batchId, backendUrl]);
 
   // Handle Drag & Drop / File Selection
   const handleFilesAdded = async (files) => {
@@ -178,18 +300,63 @@ export const BatchQueueScreen = ({
     return true;
   });
 
-  const getStatusBadge = (status, failuresCount = 0) => {
+  const getPhaseDisplay = (doc) => {
+    const livePhase = documentPhases[doc.id];
+    if (livePhase) {
+      switch (livePhase) {
+        case "validating":
+          return "Validando formato";
+        case "extracting":
+        case "extracting_pdf_content":
+          return "Extrayendo texto";
+        case "ocr_extraction":
+          return "OCR Tesseract";
+        case "deskew_normalization":
+          return "Deskew OpenCV";
+        case "ner_detection":
+          return "NER Local spaCy";
+        case "purging":
+          return "Redacción física real";
+        case "verifying":
+          return "Verificación fail-closed";
+        case "generating_audit":
+          return "Certificado criptográfico";
+        default:
+          return livePhase;
+      }
+    }
+    return null;
+  };
+
+  const getStatusBadge = (doc) => {
+    const status = doc.status;
+    const phase = getPhaseDisplay(doc);
+
     switch (status) {
       case "queued":
         return <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300">En cola</span>;
       case "validating":
       case "analyzing":
-        return <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-950 text-cyan-300 border border-cyan-800 flex items-center gap-1"><Loader2 className="w-2.5 h-2.5 animate-spin" /> Analizando</span>;
+        return (
+          <div className="flex flex-col gap-0.5">
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-950 text-cyan-300 border border-cyan-800 flex items-center gap-1">
+              <Loader2 className="w-2.5 h-2.5 animate-spin" /> Analizando
+            </span>
+            {phase && <span className="text-[9px] font-mono text-cyan-400/80">{phase}</span>}
+          </div>
+        );
       case "awaiting_review":
         return <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-950 text-amber-300 border border-amber-800">Revisión requerida</span>;
       case "purging":
       case "verifying":
-        return <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-950 text-purple-300 border border-purple-800 flex items-center gap-1"><Loader2 className="w-2.5 h-2.5 animate-spin" /> Purgando</span>;
+        return (
+          <div className="flex flex-col gap-0.5">
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-950 text-purple-300 border border-purple-800 flex items-center gap-1">
+              <Loader2 className="w-2.5 h-2.5 animate-spin" /> Purgando
+            </span>
+            {phase && <span className="text-[9px] font-mono text-purple-400/80">{phase}</span>}
+          </div>
+        );
       case "verified":
         return <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1"><CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" /> Verificado</span>;
       case "verification_failed":
@@ -208,13 +375,31 @@ export const BatchQueueScreen = ({
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <h1 className="text-2xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
               <Layers className="w-6 h-6 text-cyan-400" />
               {t("batch_title")}
             </h1>
-            <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800">
-              Concurrencia: {limits.max_concurrent} workers
+            
+            {/* Live SSE Status Pill */}
+            <span
+              data-testid="sse-status-badge"
+              className={`text-[11px] font-mono px-2 py-0.5 rounded-full flex items-center gap-1.5 border transition-all ${
+                streamConnected
+                  ? "bg-emerald-950 text-emerald-400 border-emerald-800"
+                  : "bg-amber-950 text-amber-400 border-amber-800"
+              }`}
+            >
+              <Radio className={`w-3 h-3 ${streamConnected ? "text-emerald-400 animate-pulse" : "text-amber-400"}`} />
+              <span>{streamConnected ? t("batch_live_stream_connected") : t("batch_live_stream_reconnecting")}</span>
+            </span>
+
+            {/* Workers Count Badge */}
+            <span
+              data-testid="batch-workers-badge"
+              className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800"
+            >
+              Workers: {activeWorkers} / {limits.max_concurrent} máx
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">{t("batch_subtitle")}</p>
@@ -288,6 +473,7 @@ export const BatchQueueScreen = ({
               data-testid="cancel-batch-btn"
               onClick={handleCancelBatch}
               className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 text-xs font-medium border border-slate-700 hover:border-rose-800 transition-colors"
+              title="Cancelar Lote"
             >
               <Ban className="w-3.5 h-3.5" />
             </button>
@@ -423,7 +609,7 @@ export const BatchQueueScreen = ({
                   </td>
                 </tr>
               ) : (
-                filteredDocs.map((doc, idx) => {
+                filteredDocs.map((doc) => {
                   const isPdf = doc.mime_type === "application/pdf";
                   return (
                     <tr
@@ -473,9 +659,9 @@ export const BatchQueueScreen = ({
                         )}
                       </td>
 
-                      {/* Status */}
+                      {/* Status & Live Phase */}
                       <td className="py-3 px-3">
-                        {getStatusBadge(doc.status)}
+                        {getStatusBadge(doc)}
                       </td>
 
                       {/* Matches breakdown */}

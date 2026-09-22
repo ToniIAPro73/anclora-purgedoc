@@ -5,6 +5,7 @@ import logging
 from typing import Dict, Any, Optional, List
 from backend.models import DocumentMetadata, MatchItem, BatchMetadata
 
+from backend.services.event_bus import batch_event_bus
 logger = logging.getLogger(__name__)
 
 TEMP_ROOT = os.environ.get("TEMP_ROOT", "/tmp/anclora-purgedoc")
@@ -81,6 +82,7 @@ class SessionStore:
 
     def cleanup_batch(self, batch_id: str):
         """Immediately and safely cleans up temporary disk artifacts for an entire batch."""
+        batch_event_bus.cleanup_batch(batch_id)
         batch = self.batches.pop(batch_id, None)
         self.batch_file_paths.pop(batch_id, None)
 
@@ -112,6 +114,7 @@ class SessionStore:
             self.batches.pop(b_id, None)
             self.batch_file_paths.pop(b_id, None)
 
+            batch_event_bus.cleanup_batch(b_id)
         # Clean docs belonging to session
         docs_to_del = [doc_id for doc_id, doc in self.documents.items() if doc.session_id == session_id]
         for doc_id in docs_to_del:

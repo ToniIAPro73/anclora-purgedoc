@@ -168,7 +168,11 @@ const translations = {
     batch_action_cancel: "Cancelar",
     batch_action_remove: "Eliminar",
     batch_prev_doc: "← Anterior",
-    batch_next_doc: "Siguiente →"
+    batch_next_doc: "Siguiente →",
+    batch_live_stream_connected: "Stream SSE conectado en vivo",
+    batch_live_stream_reconnecting: "Reconectando stream SSE...",
+    batch_active_workers_label: "Workers activos:",
+    batch_phase_label: "Fase:",
   },
   en: {
     app_name: "Anclora Purgedoc",
@@ -289,6 +293,10 @@ const translations = {
     batch_action_cancel: "Cancel",
     batch_action_remove: "Remove",
     batch_prev_doc: "← Previous",
+    batch_live_stream_connected: "Live SSE stream connected",
+    batch_live_stream_reconnecting: "Reconnecting SSE stream...",
+    batch_active_workers_label: "Active workers:",
+    batch_phase_label: "Phase:",
     batch_next_doc: "Next →",
     zoom: "Zoom",
     filter_all: "All",
