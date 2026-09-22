@@ -1,0 +1,29 @@
+{
+  "summary": "Security Hardening & Adversarial Redaction Verification QA run for Anclora Purgedoc. Executed full backend pytest suite via xdist (2 workers, ~53s). Result: 34/34 tests PASSED (100%). Coverage: (1) Multi-engine PDF adversarial recovery (PyMuPDF+pypdf+pdfminer.six streams+metadata, normalized variants and adversarial strings) - PASS. (2) Raster image recovery: XObject extraction + direct OCR + rendered pixel intensity <5.0 verification - PASS. (3) Deskew end-to-end coordinate accuracy on +2/-5/+12/90+skew, multipage, edge entities, forward+inverse M/M_inv mapping - PASS. (4) DOCX deep OOXML package recovery scanning all zipped XML parts - PASS. (5) /tmp/anclora-purgedoc/{session_id} ephemeral cleanup on delete + TTL expiry - PASS. (6) Zero sensitive plaintext leakage in stdout/stderr and audit outputs - PASS. (7) Verifier normalization resistance to case, whitespace, dashes, Unicode NFKC tricks - PASS. (8) All prior regression suites (test_api_e2e 8, test_deskew_pipeline 10, test_ocr_pipeline 4, test_redaction_pipeline 3) still green. Fail-closed guarantees enforced.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/security/test_pdf_adversarial_recovery.py",
+    "/app/backend/tests/security/test_raster_image_recovery.py",
+    "/app/backend/tests/security/test_docx_package_recovery.py",
+    "/app/backend/tests/security/test_temp_cleanup.py",
+    "/app/backend/tests/security/test_sensitive_log_leakage.py",
+    "/app/backend/tests/security/test_verifier_normalization.py",
+    "/app/backend/tests/security/test_end_to_end_coordinate_accuracy.py",
+    "/app/test_reports/pytest/iteration_5.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Security suite is well-partitioned under backend/tests/security/ with clear per-concern files; adversarial coverage is thorough (multi-engine PDF, pixel intensity check, OOXML deep zip scan, Unicode/NFKC verifier normalization).",
+    "Carry-over non-blocking: App.js still has fallback 'http://localhost:8001' for REACT_APP_BACKEND_URL - violates fail-fast env policy but out of scope for this backend-only security run.",
+    "Download endpoints remain unauthenticated (documented in previous iteration); acceptable for on-prem demo, worth explicit note in threat model doc."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (34/34)", "frontend": "N/A - backend-only scope"},
+  "test_credentials": "N/A - no auth",
+  "seed_data_creation": "Adversarial fixtures generated in-test by each security module (rotated/skewed PDFs, DOCX packages, raster images with sensitive tokens); ephemeral /tmp/anclora-purgedoc session dirs created and asserted cleaned.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Regression command: `python -m pytest /app/backend/tests/ -v --tb=short` (34 tests, ~53s parallel with pytest-xdist LoadScope). Security suite lives in backend/tests/security/ (7 files). Fail-closed verifier in backend/services/verification.py normalizes case/spaces/dashes/Unicode NFKC. Session cleanup in backend/services/sessions.py wipes /tmp/anclora-purgedoc/{session_id} on delete and TTL. No frontend changes in this iteration.",
+  "rca of the issue": "N/A - no issues found. All 7 security hardening objectives (multi-engine PDF verification, raster/OCR pixel destruction, deskew coordinate accuracy, DOCX OOXML deep scan, temp cleanup, log leakage prevention, verifier normalization resistance) are met with fail-closed enforcement."
+}
