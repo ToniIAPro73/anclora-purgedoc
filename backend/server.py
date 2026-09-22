@@ -1,6 +1,7 @@
 import os
 import io
 import sys
+import json
 import uuid
 import shutil
 import logging
@@ -361,7 +362,6 @@ async def purge_and_verify_document(doc_id: str):
     audit_json = audit_service.generate_audit_json(doc_meta, all_matches, passed, v_details)
     audit_json_path = os.path.join(session_dir, f"audit_{doc_id}.json")
     with open(audit_json_path, "w", encoding="utf-8") as f:
-        import json
         json.dump(audit_json, f, indent=2, ensure_ascii=False)
     paths["audit_json"] = audit_json_path
 

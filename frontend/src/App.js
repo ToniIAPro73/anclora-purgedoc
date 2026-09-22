@@ -11,7 +11,7 @@ import { ConfirmationModal } from "./components/ConfirmationModal";
 import { ResultsScreen } from "./components/ResultsScreen";
 import "./App.css";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8001";
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
 function PurgedocMainApp() {
   const { t } = useApp();

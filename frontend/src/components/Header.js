@@ -79,6 +79,7 @@ export const Header = ({ onOpenDevFixtures }) => {
               <div className="absolute right-0 mt-2 w-36 rounded-xl bg-[#111827] border border-slate-700 shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
                 <button
                   type="button"
+                  data-testid="theme-option-dark"
                   onClick={() => {
                     setThemeMode("dark");
                     setThemeMenuOpen(false);
@@ -94,6 +95,7 @@ export const Header = ({ onOpenDevFixtures }) => {
                 </button>
                 <button
                   type="button"
+                  data-testid="theme-option-light"
                   onClick={() => {
                     setThemeMode("light");
                     setThemeMenuOpen(false);
@@ -109,6 +111,7 @@ export const Header = ({ onOpenDevFixtures }) => {
                 </button>
                 <button
                   type="button"
+                  data-testid="theme-option-system"
                   onClick={() => {
                     setThemeMode("system");
                     setThemeMenuOpen(false);
