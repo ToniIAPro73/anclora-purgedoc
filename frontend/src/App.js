@@ -9,6 +9,7 @@ import { DocumentViewer } from "./components/DocumentViewer";
 import { ReviewPanel } from "./components/ReviewPanel";
 import { ConfirmationModal } from "./components/ConfirmationModal";
 import { ResultsScreen } from "./components/ResultsScreen";
+import { CustomRulesetEditor } from "./components/CustomRulesetEditor";
 import "./App.css";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -29,8 +30,21 @@ function PurgedocMainApp() {
   const [stepperStage, setStepperStage] = useState(1);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [isDevFixturesOpen, setIsDevFixturesOpen] = useState(false);
+  const [isRulesEditorOpen, setIsRulesEditorOpen] = useState(false);
   const [purgeResult, setPurgeResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+
+  // Custom Ruleset State (Persisted in localStorage)
+  const [customRules, setCustomRules] = useState(() => {
+    try {
+      const saved = localStorage.getItem("anclora_custom_rules");
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const activeCustomRulesCount = customRules.filter((r) => r.enabled).length;
 
   // Initialize ephemeral session
   useEffect(() => {
@@ -45,7 +59,7 @@ function PurgedocMainApp() {
     initSession();
   }, []);
 
-  // 1. Upload & Analyze Document
+  // 1. Upload & Analyze Document with active Custom Ruleset Overlay
   const handleStartAnalysis = async () => {
     if (!selectedFile || !sessionId) return;
     setErrorMessage(null);
@@ -53,7 +67,6 @@ function PurgedocMainApp() {
     setStepperStage(1);
 
     try {
-      // Step 1: Upload
       const formData = new FormData();
       formData.append("file", selectedFile);
       formData.append("profile_id", selectedProfile);
@@ -67,12 +80,16 @@ function PurgedocMainApp() {
       const doc = uploadRes.data;
       setDocumentMeta(doc);
 
-      // Step 2 & 3: Run Analysis (NER + Regex)
       setStepperStage(2);
-      await new Promise((r) => setTimeout(r, 600)); // Smooth UX transition
+      await new Promise((r) => setTimeout(r, 600));
       setStepperStage(3);
 
-      const analyzeRes = await axios.post(`${BACKEND_URL}/api/documents/${doc.id}/analyze`);
+      // Send base profile + active custom rules to backend
+      const analyzeRes = await axios.post(`${BACKEND_URL}/api/documents/${doc.id}/analyze`, {
+        custom_rules: customRules,
+        ruleset_id: "user_custom_ruleset",
+        ruleset_version: "1.0.0"
+      });
       setDocumentMeta(analyzeRes.data.document);
       setMatches(analyzeRes.data.matches);
 
@@ -111,7 +128,11 @@ function PurgedocMainApp() {
       await new Promise((r) => setTimeout(r, 500));
       setStepperStage(3);
 
-      const analyzeRes = await axios.post(`${BACKEND_URL}/api/documents/${doc.id}/analyze`);
+      const analyzeRes = await axios.post(`${BACKEND_URL}/api/documents/${doc.id}/analyze`, {
+        custom_rules: customRules,
+        ruleset_id: "user_custom_ruleset",
+        ruleset_version: "1.0.0"
+      });
       setDocumentMeta(analyzeRes.data.document);
       setMatches(analyzeRes.data.matches);
 
@@ -198,8 +219,12 @@ function PurgedocMainApp() {
   return (
     <div className="min-h-screen flex flex-col bg-[#0B0F19] text-slate-100 transition-colors dark:bg-[#0B0F19] dark:text-slate-100 light:bg-[#F8FAFC] light:text-slate-900">
       
-      {/* Global Header */}
-      <Header onOpenDevFixtures={() => setIsDevFixturesOpen(true)} />
+      {/* Global Header with Rules Editor Trigger */}
+      <Header
+        onOpenDevFixtures={() => setIsDevFixturesOpen(true)}
+        onOpenRulesEditor={() => setIsRulesEditorOpen(true)}
+        customRulesCount={activeCustomRulesCount}
+      />
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col">
@@ -211,6 +236,8 @@ function PurgedocMainApp() {
             setSelectedProfile={setSelectedProfile}
             onStartAnalysis={handleStartAnalysis}
             errorMessage={errorMessage}
+            customRulesCount={activeCustomRulesCount}
+            onOpenRulesEditor={() => setIsRulesEditorOpen(true)}
           />
         )}
 
@@ -274,6 +301,15 @@ function PurgedocMainApp() {
         isOpen={isDevFixturesOpen}
         onClose={() => setIsDevFixturesOpen(false)}
         onLoadFixture={handleLoadFixture}
+      />
+
+      {/* Custom Ruleset Editor Modal */}
+      <CustomRulesetEditor
+        isOpen={isRulesEditorOpen}
+        onClose={() => setIsRulesEditorOpen(false)}
+        backendUrl={BACKEND_URL}
+        customRules={customRules}
+        setCustomRules={setCustomRules}
       />
 
     </div>

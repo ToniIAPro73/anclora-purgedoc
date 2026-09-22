@@ -24,6 +24,10 @@ from backend.services.documents import document_processor
 from backend.services.redaction import redaction_engine
 from backend.services.verification import verification_engine
 from backend.services.audit import audit_service
+from backend.services.rules import (
+    CustomRule, CustomRuleset, RegexValidator,
+    RuleValidationResult, RuleTestResponse
+)
 from backend.fixtures_generator import FIXTURES_DIR, generate_all_fixtures
 
 logger = logging.getLogger(__name__)
@@ -44,27 +48,52 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# In-memory document session store for active custom rulesets
+_DOC_CUSTOM_RULESETS: Dict[str, Dict[str, Any]] = {}
+
+# In-memory session byte cache to avoid permanent pod upload storage
+_SESSION_RAW_BYTES: Dict[str, bytes] = {}
+
+def store_in_memory_session(doc_id: str, data: bytes):
+    _SESSION_RAW_BYTES[doc_id] = data
+
+def get_in_memory_session(doc_id: str) -> bytes:
+    return _SESSION_RAW_BYTES.get(doc_id, b"")
+
 # ----------------- Schemas -----------------
 class SessionResponse(BaseModel):
     session_id: str
     status: str
 
 class MatchUpdatePayload(BaseModel):
-    status: str # accepted | rejected | pending
+    status: str
 
 class BulkMatchUpdatePayload(BaseModel):
     match_ids: Optional[List[str]] = None
     all_visible: bool = False
-    status: str # accepted | rejected
+    status: str
 
 class PurgeResponse(BaseModel):
     document_id: str
-    status: str # verified | verification_failed
+    status: str
     verification_passed: bool
     failures: List[str]
     details: Dict[str, Any]
     output_sha256: Optional[str] = None
     audit_id: str
+
+class AnalyzeDocumentPayload(BaseModel):
+    custom_rules: Optional[List[CustomRule]] = None
+    ruleset_id: Optional[str] = "custom_ruleset"
+    ruleset_version: Optional[str] = "1.0.0"
+
+class TestRulePayload(BaseModel):
+    rule: CustomRule
+    test_text: str
+
+class ValidateRegexPayload(BaseModel):
+    pattern: str
+    case_sensitive: bool = False
 
 # ----------------- Routes -----------------
 
@@ -76,7 +105,8 @@ async def health_check():
         "version": "1.0.0",
         "profiles": list(detection_engine.profiles.keys()),
         "ner_models_loaded": list(detection_engine.nlp_models.keys()),
-        "privacy": "100% Local / Zero Remote LLM Calls"
+        "privacy": "100% Local / Zero Remote LLM Calls",
+        "custom_rules_engine": "RE2 / Safe PCRE"
     }
 
 @api_router.post("/sessions", response_model=SessionResponse)
@@ -92,7 +122,7 @@ async def delete_session(session_id: str):
 
 @api_router.get("/profiles")
 async def get_profiles():
-    """Returns available vertical profiles for upload UI"""
+    """Returns available base vertical profiles for upload UI and rule cloning"""
     results = []
     for pid, pdata in detection_engine.profiles.items():
         results.append({
@@ -101,18 +131,34 @@ async def get_profiles():
             "name_en": pdata.get("name_en", pid),
             "version": pdata.get("version", "1.0.0"),
             "description": pdata.get("description", ""),
-            "rules_count": len(pdata.get("regex_rules", []))
+            "rules_count": len(pdata.get("regex_rules", [])),
+            "regex_rules": pdata.get("regex_rules", [])
         })
     return results
 
-# Internal session byte cache to avoid permanent pod upload storage
-_SESSION_RAW_BYTES: Dict[str, bytes] = {}
+# ----------------- Custom Rules Endpoints -----------------
 
-def store_in_memory_session(doc_id: str, data: bytes):
-    _SESSION_RAW_BYTES[doc_id] = data
+@api_router.post("/rules/validate", response_model=RuleValidationResult)
+async def validate_regex_pattern(payload: ValidateRegexPayload):
+    """Checks pattern syntax and guards against catastrophic backtracking (ReDoS)"""
+    return RegexValidator.validate_pattern(payload.pattern, payload.case_sensitive)
 
-def get_in_memory_session(doc_id: str) -> bytes:
-    return _SESSION_RAW_BYTES.get(doc_id, b"")
+@api_router.post("/rules/test", response_model=RuleTestResponse)
+async def test_custom_rule(payload: TestRulePayload):
+    """Executes safe Regex Test Bench on synthetic test text without touching real documents"""
+    return RegexValidator.test_rule(payload.rule, payload.test_text)
+
+@api_router.post("/rules/hash")
+async def compute_ruleset_hash(ruleset: CustomRuleset):
+    """Computes deterministic hash for a given ruleset without saving it"""
+    return {
+        "ruleset_id": ruleset.ruleset_id,
+        "version": ruleset.version,
+        "hash": ruleset.calculate_hash(),
+        "active_rules_count": sum(1 for r in ruleset.rules if r.enabled)
+    }
+
+# ----------------- Document Endpoints -----------------
 
 @api_router.post("/sessions/{session_id}/documents")
 async def upload_document(
@@ -123,7 +169,6 @@ async def upload_document(
     session_dir = session_store.get_session_dir(session_id)
     doc_id = str(uuid.uuid4())
     
-    # Validate extension and mime type
     filename = file.filename or "uploaded_doc"
     ext = Path(filename).suffix.lower()
     if ext not in [".pdf", ".docx"]:
@@ -137,7 +182,6 @@ async def upload_document(
 
     store_in_memory_session(doc_id, content_bytes)
 
-    # Temporary staging path inside ephemeral session dir for PyMuPDF/docx processor
     dest_file = os.path.join(session_dir, f"{doc_id}_{filename}")
     shutil.copyfileobj(io.BytesIO(content_bytes), open(dest_file, "wb"))
 
@@ -165,7 +209,6 @@ async def upload_document(
 
 @api_router.post("/fixtures/{fixture_name}/load")
 async def load_synthetic_fixture(fixture_name: str, session_id: str, profile_id: Optional[str] = None):
-    """Dev/QA endpoint for instant 1-click test file loading"""
     session_dir = session_store.get_session_dir(session_id)
     doc_id = str(uuid.uuid4())
     
@@ -209,8 +252,8 @@ async def load_synthetic_fixture(fixture_name: str, session_id: str, profile_id:
     return doc_meta.model_dump()
 
 @api_router.post("/documents/{doc_id}/analyze")
-async def analyze_document(doc_id: str):
-    """Executes local parsing, text extraction, NER & Regex detection"""
+async def analyze_document(doc_id: str, payload: Optional[AnalyzeDocumentPayload] = None):
+    """Executes local parsing, text extraction, NER & Regex detection with optional custom rules"""
     if doc_id not in session_store.documents:
         raise HTTPException(status_code=404, detail="Documento no encontrado.")
 
@@ -232,7 +275,6 @@ async def analyze_document(doc_id: str):
         doc_meta.page_count = page_count
         doc_meta.has_text_layer = has_text
         doc_meta.is_scanned_ocr = False
-        # Generate local headless PDF representation for visual review
         preview_pdf = document_processor.convert_docx_to_preview_pdf(source_file, session_dir)
         paths["preview_pdf"] = preview_pdf
 
@@ -241,21 +283,44 @@ async def analyze_document(doc_id: str):
         doc_meta.error_message = "El documento no contiene texto detectable incluso tras análisis OCR local."
         raise HTTPException(status_code=422, detail=doc_meta.error_message)
 
-    # Run detection
+    # Process custom rules and calculate deterministic hash
+    custom_rules_list = payload.custom_rules if payload else None
+    if custom_rules_list:
+        ruleset_obj = CustomRuleset(
+            ruleset_id=payload.ruleset_id or "custom_ruleset",
+            version=payload.ruleset_version or "1.0.0",
+            rules=custom_rules_list
+        )
+        _DOC_CUSTOM_RULESETS[doc_id] = {
+            "ruleset_id": ruleset_obj.ruleset_id,
+            "version": ruleset_obj.version,
+            "hash": ruleset_obj.calculate_hash(),
+            "active_rules_count": sum(1 for r in custom_rules_list if r.enabled)
+        }
+    else:
+        _DOC_CUSTOM_RULESETS[doc_id] = {
+            "ruleset_id": "none",
+            "version": "1.0.0",
+            "hash": "sha256:none",
+            "active_rules_count": 0
+        }
+
+    # Run detection with custom rules overlay
     matches = detection_engine.analyze_document_content(
         doc_id=doc_id,
         profile_id=doc_meta.profile_id,
-        pages_content=pages_content
+        pages_content=pages_content,
+        custom_rules=custom_rules_list
     )
 
-    # Store matches in memory
     session_store.matches[doc_id] = {m.id: m for m in matches}
     doc_meta.status = "ready_for_review"
 
     return {
         "document": doc_meta.model_dump(),
         "matches_count": len(matches),
-        "matches": [m.to_public_dict() for m in matches]
+        "matches": [m.to_public_dict() for m in matches],
+        "ruleset_meta": _DOC_CUSTOM_RULESETS[doc_id]
     }
 
 @api_router.get("/documents/{doc_id}/matches")
@@ -268,7 +333,6 @@ async def get_document_matches(doc_id: str):
 
 @api_router.patch("/matches/{match_id}")
 async def update_match_status(match_id: str, payload: MatchUpdatePayload):
-    """Update single match decision: accepted | rejected | pending"""
     found_match = None
     for doc_matches in session_store.matches.values():
         if match_id in doc_matches:
@@ -286,7 +350,6 @@ async def update_match_status(match_id: str, payload: MatchUpdatePayload):
 
 @api_router.post("/documents/{doc_id}/matches/bulk")
 async def bulk_update_matches(doc_id: str, payload: BulkMatchUpdatePayload):
-    """Batch accept or reject matches"""
     if doc_id not in session_store.matches:
         raise HTTPException(status_code=404, detail="Documento no encontrado.")
 
@@ -303,7 +366,6 @@ async def bulk_update_matches(doc_id: str, payload: BulkMatchUpdatePayload):
 
 @api_router.get("/documents/{doc_id}/page-image/{page_num}")
 async def get_page_image(doc_id: str, page_num: int):
-    """Returns exact rendered PNG of PDF page for synchronized high-precision canvas review"""
     if doc_id not in session_store.documents:
         raise HTTPException(status_code=404, detail="Documento no encontrado.")
 
@@ -319,10 +381,6 @@ async def get_page_image(doc_id: str, page_num: int):
 async def purge_and_verify_document(doc_id: str):
     """
     Core Mission: Real Redaction & Post-Purge Fail-Closed Verification
-    1. Filter accepted matches
-    2. Apply physical content redaction to PDF or OOXML
-    3. Reopen generated file and verify absence of values
-    4. Produce Cryptographic Audit Manifest & Certificate PDF
     """
     if doc_id not in session_store.documents:
         raise HTTPException(status_code=404, detail="Documento no encontrado.")
@@ -345,14 +403,11 @@ async def purge_and_verify_document(doc_id: str):
     if ext == ".pdf":
         is_scanned = getattr(doc_meta, "is_scanned_ocr", False)
         redaction_res = redaction_engine.purge_pdf(source_file, purged_path, approved_matches, is_scanned=is_scanned)
-        # 2. Automated Verification
         passed, failures, v_details = verification_engine.verify_pdf(purged_path, approved_matches, is_scanned=is_scanned)
     else: # DOCX
         redaction_res = redaction_engine.purge_docx(source_file, purged_path, approved_matches)
-        # 2. Automated Verification
         passed, failures, v_details = verification_engine.verify_docx(purged_path, approved_matches)
 
-    # Update match statuses
     for m in approved_matches:
         m.status = "applied" if passed else "verification_failed"
 
@@ -363,8 +418,9 @@ async def purge_and_verify_document(doc_id: str):
 
     paths["purged"] = purged_path
 
-    # 3. Generate Audit Records
-    audit_json = audit_service.generate_audit_json(doc_meta, all_matches, passed, v_details)
+    # 3. Generate Audit Records with custom ruleset metadata
+    custom_ruleset_meta = _DOC_CUSTOM_RULESETS.get(doc_id)
+    audit_json = audit_service.generate_audit_json(doc_meta, all_matches, passed, v_details, custom_ruleset_meta=custom_ruleset_meta)
     audit_json_path = os.path.join(session_dir, f"audit_{doc_id}.json")
     with open(audit_json_path, "w", encoding="utf-8") as f:
         json.dump(audit_json, f, indent=2, ensure_ascii=False)
@@ -386,7 +442,6 @@ async def purge_and_verify_document(doc_id: str):
 
 @api_router.get("/documents/{doc_id}/download")
 async def download_purged_file(doc_id: str):
-    """Downloads purged file only if verified or requested"""
     paths = session_store.doc_file_paths.get(doc_id, {})
     purged_path = paths.get("purged")
     if not purged_path or not os.path.exists(purged_path):
@@ -412,5 +467,4 @@ async def download_audit_pdf(doc_id: str):
         raise HTTPException(status_code=404, detail="Certificado de auditoría PDF no disponible.")
     return FileResponse(pdf_path, filename=f"audit_{doc_id}.pdf", media_type="application/pdf")
 
-# Include Router
 app.include_router(api_router)

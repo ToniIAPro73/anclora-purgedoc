@@ -1,6 +1,6 @@
 import React, { useRef } from "react";
 import { useApp } from "../context/AppContext";
-import { UploadCloud, FileText, CheckCircle, ShieldAlert, Sparkles, AlertCircle } from "lucide-react";
+import { UploadCloud, FileText, CheckCircle, ShieldAlert, Sparkles, AlertCircle, Sliders } from "lucide-react";
 
 export const UploadScreen = ({
   selectedFile,
@@ -8,7 +8,9 @@ export const UploadScreen = ({
   selectedProfile,
   setSelectedProfile,
   onStartAnalysis,
-  errorMessage
+  errorMessage,
+  customRulesCount = 0,
+  onOpenRulesEditor
 }) => {
   const { t } = useApp();
   const fileInputRef = useRef(null);
@@ -144,9 +146,23 @@ export const UploadScreen = ({
 
       {/* Vertical Profiles Selection */}
       <div className="mt-8">
-        <label className="block text-xs font-mono uppercase tracking-wider text-cyan-400 mb-3">
-          {t("select_profile_label")}
-        </label>
+        <div className="flex items-center justify-between mb-3">
+          <label className="text-xs font-mono uppercase tracking-wider text-cyan-400">
+            {t("select_profile_label")}
+          </label>
+
+          {/* Custom Rules Active Badge indicator */}
+          {customRulesCount > 0 && onOpenRulesEditor && (
+            <button
+              type="button"
+              onClick={onOpenRulesEditor}
+              className="flex items-center gap-1.5 text-xs text-cyan-300 hover:text-cyan-200 bg-cyan-950/60 border border-cyan-800/80 px-2.5 py-1 rounded-full transition-colors"
+            >
+              <Sliders className="w-3 h-3 text-cyan-400" />
+              <span>+{customRulesCount} {t("active_custom_rules_badge")}</span>
+            </button>
+          )}
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {profiles.map((p) => {

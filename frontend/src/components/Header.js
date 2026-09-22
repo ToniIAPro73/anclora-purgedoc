@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
-import { ShieldCheck, Moon, Sun, Monitor, Globe, FileCode2, Check } from "lucide-react";
+import { ShieldCheck, Moon, Sun, Monitor, Globe, FileCode2, Check, Sliders } from "lucide-react";
 
-export const Header = ({ onOpenDevFixtures }) => {
+export const Header = ({ onOpenDevFixtures, onOpenRulesEditor, customRulesCount = 0 }) => {
   const { themeMode, setThemeMode, cycleTheme, lang, toggleLanguage, t } = useApp();
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
 
@@ -30,9 +30,31 @@ export const Header = ({ onOpenDevFixtures }) => {
           </div>
         </div>
 
-        {/* Right Controls: Dev Fixtures + ES/EN Pill + Circular Theme Switcher */}
+        {/* Right Controls: Custom Rules + Dev Fixtures + ES/EN Pill + Circular Theme Switcher */}
         <div className="flex items-center gap-3">
           
+          {/* Custom Rules Button */}
+          {onOpenRulesEditor && (
+            <button
+              type="button"
+              data-testid="open-rules-editor-btn"
+              onClick={onOpenRulesEditor}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-500/40 hover:border-cyan-400 transition-all shadow-sm"
+              title="Editor de reglas personalizadas (Regex)"
+            >
+              <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+              <span>{t("rules_nav_btn")}</span>
+              {customRulesCount > 0 && (
+                <span
+                  data-testid="rules-count-badge"
+                  className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-cyan-500 text-slate-950 font-bold"
+                >
+                  {customRulesCount}
+                </span>
+              )}
+            </button>
+          )}
+
           {/* Dev/QA Fixture Loader Button (Development/QA only) */}
           {isDevMode && onOpenDevFixtures && (
             <button

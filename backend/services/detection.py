@@ -6,6 +6,7 @@ from typing import Dict, Any, List, Optional
 from pathlib import Path
 import spacy
 from backend.models import MatchItem, BoundingBox, hash_text
+from backend.services.rules import CustomRule, RegexValidator
 
 logger = logging.getLogger(__name__)
 CONFIG_DIR = Path(__file__).parent.parent / "config" / "profiles"
@@ -54,8 +55,13 @@ class DetectionEngine:
         self,
         doc_id: str,
         profile_id: str,
-        pages_content: List[Dict[str, Any]]
+        pages_content: List[Dict[str, Any]],
+        custom_rules: Optional[List[CustomRule]] = None
     ) -> List[MatchItem]:
+        """
+        Combines Base Profile Rules + Active Custom Rules + Local spaCy NER.
+        Custom rules take priority over standard profile rules when prioritized higher.
+        """
         profile = self.profiles.get(profile_id, self.profiles.get("rrhh"))
         profile_version = profile.get("version", "1.0.0")
         
@@ -65,6 +71,21 @@ class DetectionEngine:
 
         raw_matches: List[MatchItem] = []
 
+        # Prepare active custom rules for this profile
+        applicable_custom_rules = []
+        if custom_rules:
+            for cr in custom_rules:
+                if cr.enabled and (profile_id in cr.profiles or "all" in cr.profiles):
+                    # Validate before running
+                    val = RegexValidator.validate_pattern(cr.pattern, cr.case_sensitive)
+                    if val.valid:
+                        applicable_custom_rules.append(cr)
+                    else:
+                        logger.warning(f"Skipping invalid custom rule {cr.name}: {val.error}")
+
+        # Sort custom rules by priority descending
+        applicable_custom_rules.sort(key=lambda r: r.priority, reverse=True)
+
         for page in pages_content:
             p_num = page["page_num"]
             p_text = page.get("text", "")
@@ -73,7 +94,55 @@ class DetectionEngine:
             page_h = page.get("height", 842.0)
             is_ocr = page.get("is_ocr", False)
 
-            # 1. Regex Rules
+            # 1. Custom Rules Evaluation (Higher Priority Layer)
+            for crule in applicable_custom_rules:
+                flags = 0 if crule.case_sensitive else re.IGNORECASE
+                try:
+                    for m in re.finditer(crule.pattern, p_text, flags):
+                        raw_val = m.group(0).strip()
+                        if len(raw_val) < 2:
+                            continue
+                        bboxes = self._find_all_bboxes_for_text(raw_val, page_rects, page_w, page_h)
+                        preview = self._make_preview(raw_val, crule.entity_type)
+                        source_tag = ["ocr", "custom_regex"] if is_ocr else ["custom_regex"]
+
+                        if bboxes:
+                            for b in bboxes:
+                                raw_matches.append(MatchItem(
+                                    document_id=doc_id,
+                                    entity_type=crule.entity_type,
+                                    source=source_tag,
+                                    confidence=crule.confidence,
+                                    original_text_hash=hash_text(raw_val),
+                                    text_preview=preview,
+                                    raw_text=raw_val,
+                                    page=p_num,
+                                    bbox=b,
+                                    status="pending",
+                                    rule_id=f"custom.{crule.id}",
+                                    profile_id=profile_id,
+                                    profile_version=profile_version
+                                ))
+                        else:
+                            raw_matches.append(MatchItem(
+                                document_id=doc_id,
+                                entity_type=crule.entity_type,
+                                source=source_tag,
+                                confidence=crule.confidence,
+                                original_text_hash=hash_text(raw_val),
+                                text_preview=preview,
+                                raw_text=raw_val,
+                                page=p_num,
+                                bbox=None,
+                                status="pending",
+                                rule_id=f"custom.{crule.id}",
+                                profile_id=profile_id,
+                                profile_version=profile_version
+                            ))
+                except Exception as ex:
+                    logger.warning(f"Error running custom rule {crule.name}: {ex}")
+
+            # 2. Base Profile Regex Rules
             for rule in profile.get("regex_rules", []):
                 pattern = rule["pattern"]
                 ent_type = rule["entity_type"]
@@ -127,7 +196,7 @@ class DetectionEngine:
                 except Exception as ex:
                     logger.warning(f"Error running regex {rule_id}: {ex}")
 
-            # 2. Local spaCy NER
+            # 3. Local spaCy NER
             if profile.get("ner", {}).get("enabled", True) and nlp:
                 try:
                     doc = nlp(p_text)
@@ -179,7 +248,7 @@ class DetectionEngine:
                 except Exception as ex:
                     logger.warning(f"Error in NER detection: {ex}")
 
-        # 3. Deduplication and consolidation
+        # 4. Deduplication and consolidation
         deduplicated = self._deduplicate_matches(raw_matches)
         return deduplicated
 
@@ -268,7 +337,10 @@ class DetectionEngine:
                 existing = consolidated[key]
                 all_sources = list(set(existing.source + m.source))
                 existing.source = all_sources
-                if m.confidence > existing.confidence:
+                
+                # Custom rules override or upgrade confidence
+                is_custom = any("custom" in s for s in m.source)
+                if is_custom or m.confidence > existing.confidence:
                     existing.confidence = m.confidence
                     existing.entity_type = m.entity_type
                     existing.rule_id = m.rule_id

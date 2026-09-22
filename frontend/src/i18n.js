@@ -15,6 +15,46 @@ const translations = {
     fixture_scanned: "Informe Médico Escaneado (PDF Raster / OCR)",
     fixture_rotated: "Certificado Rotado (PDF Escaneado / OCR)",
 
+    // Header nav
+    rules_nav_btn: "Reglas Personalizadas",
+
+    // Ruleset Editor
+    rules_title: "Gestor de Reglas Sensibles Personalizadas",
+    rules_subtitle: "Configura reglas regex propias sin modificar los perfiles base de fábrica (RRHH, Legal, DevOps).",
+    btn_new_rule: "Nueva Regla",
+    btn_import_rules: "Importar JSON",
+    btn_export_rules: "Exportar JSON",
+    btn_clone_base: "Clonar Regla Base",
+    rules_empty: "No tienes reglas personalizadas configuradas todavía. Crea una regla nueva o clona una existente.",
+    rule_name: "Nombre de la Regla",
+    rule_desc: "Descripción",
+    rule_entity_type: "Categoría de Entidad",
+    rule_pattern: "Expresión Regular (Regex)",
+    rule_case_sensitive: "Sensible a Mayúsculas",
+    rule_priority: "Prioridad",
+    rule_profiles: "Perfiles aplicables",
+    rule_example: "Ejemplo de valor sintético",
+    rule_status_active: "Activa",
+    rule_status_disabled: "Inactiva",
+    btn_edit: "Editar",
+    btn_duplicate: "Duplicar",
+    btn_delete: "Eliminar",
+    btn_test_bench: "Test Bench",
+    btn_save_rule: "Guardar Regla",
+    delete_confirm_title: "¿Eliminar esta regla personalizada?",
+    delete_confirm_desc: "Esta acción no se puede deshacer. La regla dejará de aplicarse a los futuros análisis.",
+    
+    // Test Bench
+    test_bench_title: "Regex Test Bench Interactivo",
+    test_bench_subtitle: "Prueba tu patrón con datos sintéticos seguros antes de aplicarlo a documentos.",
+    test_bench_input_label: "Texto sintético de prueba",
+    test_bench_input_placeholder: "Pega o escribe texto simulado para probar la detección...",
+    btn_run_test: "Ejecutar Test",
+    test_bench_matches_count: "coincidencias detectadas en",
+    test_bench_no_matches: "No se encontraron coincidencias con el texto de prueba.",
+    test_bench_valid_regex: "Sintaxis válida (Motor seguro RE2)",
+    test_bench_invalid_regex: "Error en la expresión regular:",
+
     // Upload screen
     upload_title: "Purga y anonimización de documentos",
     upload_subtitle: "Detección precisa mediante NER local y reglas verticales. Eliminación irreversible del contenido subyacente con verificación criptográfica.",
@@ -31,6 +71,7 @@ const translations = {
     profile_legal_desc: "Detecta CIF, DNI de partes, números de autos judiciales, cláusulas, importes e IBANs.",
     profile_support_title: "Soporte Técnico / DevOps",
     profile_support_desc: "Detecta direcciones IP, tokens de API, JWTs, emails de cliente e identificadores de tickets.",
+    active_custom_rules_badge: "reglas personalizadas activas",
     btn_start_analysis: "Analizar Documento",
 
     // Processing Stepper
@@ -92,7 +133,8 @@ const translations = {
     source_hash: "SHA-256 Original:",
     output_hash: "SHA-256 Purgado:",
     audit_id_label: "Identificador de Auditoría:",
-    meta_sanitized_label: "Metadatos Saneados:"
+    meta_sanitized_label: "Metadatos Saneados:",
+    ruleset_hash_label: "Ruleset Determinista:"
   },
   en: {
     app_name: "Anclora Purgedoc",
@@ -110,6 +152,46 @@ const translations = {
     fixture_scanned: "Scanned Medical Report (Raster PDF / OCR)",
     fixture_rotated: "Rotated Certificate (Scanned PDF / OCR)",
 
+    // Header nav
+    rules_nav_btn: "Custom Rules",
+
+    // Ruleset Editor
+    rules_title: "Custom Sensitive Rules Manager",
+    rules_subtitle: "Configure custom regex rules without modifying built-in factory profiles (HR, Legal, DevOps).",
+    btn_new_rule: "New Rule",
+    btn_import_rules: "Import JSON",
+    btn_export_rules: "Export JSON",
+    btn_clone_base: "Clone Base Rule",
+    rules_empty: "You have no custom rules configured yet. Create a new rule or clone an existing one.",
+    rule_name: "Rule Name",
+    rule_desc: "Description",
+    rule_entity_type: "Entity Category",
+    rule_pattern: "Regular Expression (Regex)",
+    rule_case_sensitive: "Case Sensitive",
+    rule_priority: "Priority",
+    rule_profiles: "Applicable Profiles",
+    rule_example: "Synthetic Example",
+    rule_status_active: "Active",
+    rule_status_disabled: "Inactive",
+    btn_edit: "Edit",
+    btn_duplicate: "Duplicate",
+    btn_delete: "Delete",
+    btn_test_bench: "Test Bench",
+    btn_save_rule: "Save Rule",
+    delete_confirm_title: "Delete this custom rule?",
+    delete_confirm_desc: "This action cannot be undone. The rule will no longer be applied to future analyses.",
+
+    // Test Bench
+    test_bench_title: "Interactive Regex Test Bench",
+    test_bench_subtitle: "Safely test your regex pattern against synthetic dummy data before running on documents.",
+    test_bench_input_label: "Synthetic test text",
+    test_bench_input_placeholder: "Paste or write simulated text to verify pattern matching...",
+    btn_run_test: "Run Test",
+    test_bench_matches_count: "matches detected in",
+    test_bench_no_matches: "Zero matches found in test text.",
+    test_bench_valid_regex: "Valid syntax (Safe RE2 Engine)",
+    test_bench_invalid_regex: "Regular expression error:",
+
     // Upload screen
     upload_title: "Document Redaction & Sanitization",
     upload_subtitle: "Precise detection via local NER and vertical profiles. Irreversible content purge with cryptographic verification.",
@@ -126,6 +208,7 @@ const translations = {
     profile_legal_desc: "Detects CIF, signatories' IDs, court case numbers, contractual amounts and IBANs.",
     profile_support_title: "Tech Support / DevOps",
     profile_support_desc: "Detects IP addresses, API tokens, JWTs, customer emails and ticket identifiers.",
+    active_custom_rules_badge: "active custom rules",
     btn_start_analysis: "Analyze Document",
 
     // Processing Stepper
@@ -187,7 +270,8 @@ const translations = {
     source_hash: "Source SHA-256:",
     output_hash: "Purged SHA-256:",
     audit_id_label: "Audit Identifier:",
-    meta_sanitized_label: "Metadata Sanitized:"
+    meta_sanitized_label: "Metadata Sanitized:",
+    ruleset_hash_label: "Deterministic Ruleset:"
   }
 };
 
