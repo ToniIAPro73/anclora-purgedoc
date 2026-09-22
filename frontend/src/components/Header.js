@@ -1,0 +1,134 @@
+import React, { useState } from "react";
+import { useApp } from "../context/AppContext";
+import { ShieldCheck, Moon, Sun, Monitor, Globe, FileCode2, Check } from "lucide-react";
+
+export const Header = ({ onOpenDevFixtures }) => {
+  const { themeMode, setThemeMode, cycleTheme, lang, toggleLanguage, t } = useApp();
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+
+  const isDevMode = true; // Enabled in dev/preview environment
+
+  return (
+    <header className="sticky top-0 z-50 w-full border-b border-slate-800 bg-[#0B0F19]/90 backdrop-blur-md transition-colors dark:bg-[#0B0F19]/95 dark:border-slate-800 light:bg-white/95 light:border-slate-200">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        
+        {/* Left: Reserved Logo Slot & Product Name */}
+        <div className="flex items-center gap-3">
+          <div
+            data-testid="header-logo-slot"
+            className="w-9 h-9 rounded-lg bg-blue-950/60 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-sm"
+          >
+            <ShieldCheck className="w-5 h-5 text-cyan-400" />
+          </div>
+          <div className="flex flex-col">
+            <span className="font-bold text-lg tracking-tight text-white dark:text-white light:text-slate-900">
+              {t("app_name")}
+            </span>
+            <span className="text-[10px] uppercase font-mono tracking-wider text-cyan-400 dark:text-cyan-400 light:text-blue-600">
+              {t("privacy_badge")}
+            </span>
+          </div>
+        </div>
+
+        {/* Right Controls: Dev Fixtures + ES/EN Pill + Circular Theme Switcher */}
+        <div className="flex items-center gap-3">
+          
+          {/* Dev/QA Fixture Loader Button (Development/QA only) */}
+          {isDevMode && onOpenDevFixtures && (
+            <button
+              type="button"
+              data-testid="qa-fixtures-btn"
+              onClick={onOpenDevFixtures}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-slate-800/80 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 hover:border-cyan-400 transition-all shadow-sm"
+              title="Cargar documento de prueba (Dev/QA)"
+            >
+              <FileCode2 className="w-3.5 h-3.5" />
+              <span>{t("dev_fixtures_btn")}</span>
+            </button>
+          )}
+
+          {/* Language Toggle: Custom Pill Button */}
+          <button
+            type="button"
+            data-testid="language-toggle-btn"
+            onClick={toggleLanguage}
+            className="flex items-center gap-1.5 px-3 py-1.5 h-9 rounded-full bg-[#0E1525] border border-cyan-500/40 hover:border-cyan-400 text-[#F5F7FA] text-xs font-semibold shadow-[0_0_12px_rgba(59,130,246,0.15)] hover:shadow-[0_0_15px_rgba(56,189,248,0.25)] transition-all"
+            aria-label={`Switch language to ${lang === "es" ? "English" : "Spanish"}`}
+          >
+            <Globe className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="tracking-wide font-mono uppercase">{lang}</span>
+          </button>
+
+          {/* Theme Switcher: Circular Pill Button with Subtle Cyan Glow */}
+          <div className="relative">
+            <button
+              type="button"
+              data-testid="theme-toggle-btn"
+              onClick={() => setThemeMenuOpen(!themeMenuOpen)}
+              className="w-9 h-9 rounded-full bg-[#0E1525] border border-cyan-500/40 hover:border-cyan-400 text-[#F5F7FA] flex items-center justify-center shadow-[0_0_12px_rgba(59,130,246,0.15)] hover:shadow-[0_0_15px_rgba(56,189,248,0.25)] transition-all"
+              aria-label="Theme selector"
+              aria-expanded={themeMenuOpen}
+            >
+              {themeMode === "dark" && <Moon className="w-4 h-4 text-cyan-400" />}
+              {themeMode === "light" && <Sun className="w-4 h-4 text-amber-400" />}
+              {themeMode === "system" && <Monitor className="w-4 h-4 text-blue-400" />}
+            </button>
+
+            {/* Dropdown Menu for Theme Selection */}
+            {themeMenuOpen && (
+              <div className="absolute right-0 mt-2 w-36 rounded-xl bg-[#111827] border border-slate-700 shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setThemeMode("dark");
+                    setThemeMenuOpen(false);
+                  }}
+                  className={`w-full px-3 py-2 text-xs flex items-center justify-between text-left hover:bg-slate-800 ${
+                    themeMode === "dark" ? "text-cyan-400 font-semibold" : "text-slate-300"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <Moon className="w-3.5 h-3.5" /> Oscuro / Dark
+                  </span>
+                  {themeMode === "dark" && <Check className="w-3 h-3" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setThemeMode("light");
+                    setThemeMenuOpen(false);
+                  }}
+                  className={`w-full px-3 py-2 text-xs flex items-center justify-between text-left hover:bg-slate-800 ${
+                    themeMode === "light" ? "text-cyan-400 font-semibold" : "text-slate-300"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <Sun className="w-3.5 h-3.5" /> Claro / Light
+                  </span>
+                  {themeMode === "light" && <Check className="w-3 h-3" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setThemeMode("system");
+                    setThemeMenuOpen(false);
+                  }}
+                  className={`w-full px-3 py-2 text-xs flex items-center justify-between text-left hover:bg-slate-800 ${
+                    themeMode === "system" ? "text-cyan-400 font-semibold" : "text-slate-300"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <Monitor className="w-3.5 h-3.5" /> Sistema / System
+                  </span>
+                  {themeMode === "system" && <Check className="w-3 h-3" />}
+                </button>
+              </div>
+            )}
+          </div>
+
+        </div>
+
+      </div>
+    </header>
+  );
+};

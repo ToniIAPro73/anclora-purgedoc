@@ -1,0 +1,50 @@
+id: rrhh
+name_es: "RRHH / Nóminas"
+name_en: "HR / Payroll"
+version: "1.0.0"
+description: "Detección de datos personales, identificadores fiscales, cuentas bancarias y remuneraciones de empleados"
+confidence_threshold: 0.65
+ner:
+  enabled: true
+  entities:
+    - PERSON
+    - LOC
+    - GPE
+    - ORG
+regex_rules:
+  - id: "es_dni_nie"
+    entity_type: "DNI_NIE_NIF"
+    pattern: "(?:[XYZ]\\d{7}[A-Z]|\\d{8}[A-HJ-NP-TV-Z])"
+    confidence: 0.98
+    case_sensitive: false
+    description: "DNI o NIE español"
+  - id: "email"
+    entity_type: "EMAIL"
+    pattern: "[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+"
+    confidence: 0.99
+    case_sensitive: false
+    description: "Dirección de correo electrónico"
+  - id: "es_phone"
+    entity_type: "PHONE"
+    pattern: "(?:\\+34|0034)?[ -]?(?:[6789]\\d{2})[ -]?(\\d{3})[ -]?(\\d{3})"
+    confidence: 0.92
+    case_sensitive: false
+    description: "Número telefónico español"
+  - id: "es_iban"
+    entity_type: "IBAN"
+    pattern: "ES\\d{2}[ ]?\\d{4}[ ]?\\d{4}[ ]?\\d{2}[ ]?\\d{10}"
+    confidence: 0.99
+    case_sensitive: false
+    description: "IBAN cuenta bancaria española"
+  - id: "es_ssn"
+    entity_type: "CUSTOM_IDENTIFIER"
+    pattern: "(?:NSS|Seguridad Social:?|Num Afiliacion:?)[ ]*\\d{2}[ /-]\\d{8}[ /-]\\d{2}"
+    confidence: 0.95
+    case_sensitive: false
+    description: "Número de la Seguridad Social"
+  - id: "salary_amount"
+    entity_type: "FINANCIAL_AMOUNT"
+    pattern: "(?:(?:\\d{1,3}(?:[.,]\\d{3})*|\\d+)(?:[.,]\\d{2})?\\s*(?:€|EUR|euros|USD|\\$))"
+    confidence: 0.88
+    case_sensitive: false
+    description: "Importes monetarios y compensaciones"

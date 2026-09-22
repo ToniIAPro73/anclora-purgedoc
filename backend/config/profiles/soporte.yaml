@@ -1,0 +1,42 @@
+id: soporte
+name_es: "Soporte Técnico / DevOps"
+name_en: "Tech Support / DevOps"
+version: "1.0.0"
+description: "Detección de direcciones IP, credenciales de API, tokens de autenticación, URLs internas y hostnames"
+confidence_threshold: 0.65
+ner:
+  enabled: true
+  entities:
+    - PERSON
+    - ORG
+regex_rules:
+  - id: "ip_address_v4"
+    entity_type: "IP_ADDRESS"
+    pattern: "\\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\b"
+    confidence: 0.99
+    case_sensitive: false
+    description: "Direcciones IPv4"
+  - id: "api_token_generic"
+    entity_type: "API_TOKEN"
+    pattern: "(?:sk_live_[0-9a-zA-Z]{24,40}|sk_test_[0-9a-zA-Z]{24,40}|ghp_[0-9a-zA-Z]{36}|ey[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9._-]{10,}\\.[A-Za-z0-9._-]{10,}|(?:bearer|token|apikey|api_key|secret)[ =:\"']+[A-Za-z0-9_\\-]{20,64})"
+    confidence: 0.98
+    case_sensitive: false
+    description: "Claves de API, JWTs y tokens de acceso"
+  - id: "email"
+    entity_type: "EMAIL"
+    pattern: "[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+"
+    confidence: 0.99
+    case_sensitive: false
+    description: "Correo del remitente de ticket"
+  - id: "phone"
+    entity_type: "PHONE"
+    pattern: "(?:\\+34|0034)?[ -]?(?:[6789]\\d{2})[ -]?(\\d{3})[ -]?(\\d{3})"
+    confidence: 0.90
+    case_sensitive: false
+    description: "Teléfono de contacto técnico"
+  - id: "customer_id"
+    entity_type: "CUSTOM_IDENTIFIER"
+    pattern: "(?:CID|CUST|ACC|TICKET)[-_#][A-Za-z0-9]{4,12}"
+    confidence: 0.93
+    case_sensitive: false
+    description: "Identificador de cliente o ticket interno"

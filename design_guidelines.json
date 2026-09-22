@@ -1,0 +1,214 @@
+{
+  "product_identity": {
+    "name": "Anclora Purgedoc",
+    "version": "MVP 1.0",
+    "core_purpose": "Desktop-first document redaction & privacy application with accessible review interface, native PDF and DOCX support, local NER/regex detection, synchronized viewer with bounding boxes, real content purge, automated fail-closed post-purge verification, and cryptographic audit reports.",
+    "brand_pillars": ["Control", "Precision", "Privacy", "Security", "Traceability"],
+    "forbidden_tropes": ["Hacker aesthetics", "Giant padlocks", "Cyberpunk neon overload", "Artificial fear-mongering", "Fake progress bars"],
+    "tone_and_voice": "Sober, high-trust, institutional, precise Spanish/English bilingual compliance tool."
+  },
+  "theme_and_color_system": {
+    "default_mode": "dark",
+    "modes_supported": ["dark", "light", "system"],
+    "color_archetype": "Swiss & High-Contrast Performance Dark Slate",
+    "palette": {
+      "dark": {
+        "bg_app": "#0B0F19",
+        "bg_surface_primary": "#111827",
+        "bg_surface_secondary": "#1E293B",
+        "bg_header_controls": "#0E1525",
+        "border_subtle": "#1E293B",
+        "border_accent": "#3B82F6",
+        "border_header_control": "#38BDF8",
+        "text_primary": "#F5F7FA",
+        "text_secondary": "#94A3B8",
+        "text_muted": "#64748B",
+        "accent_primary": "#3B82F6",
+        "accent_cyan": "#38BDF8",
+        "status_success": "#10B981",
+        "status_warning": "#F59E0B",
+        "status_danger": "#EF4444",
+        "fail_closed_bg": "#450A0A",
+        "fail_closed_border": "#991B1B",
+        "fail_closed_text": "#FCA5A5"
+      },
+      "light": {
+        "bg_app": "#F8FAFC",
+        "bg_surface_primary": "#FFFFFF",
+        "bg_surface_secondary": "#F1F5F9",
+        "bg_header_controls": "#0E1525",
+        "border_subtle": "#E2E8F0",
+        "border_accent": "#2563EB",
+        "border_header_control": "#0284C7",
+        "text_primary": "#0F172A",
+        "text_secondary": "#475569",
+        "text_muted": "#94A3B8",
+        "accent_primary": "#2563EB",
+        "accent_cyan": "#0284C7",
+        "status_success": "#059669",
+        "status_warning": "#D97706",
+        "status_danger": "#DC2626",
+        "fail_closed_bg": "#FEF2F2",
+        "fail_closed_border": "#FCA5A5",
+        "fail_closed_text": "#991B1B"
+      }
+    },
+    "header_controls_spec": {
+      "language_toggle": "Pill button format with ES / EN switcher, subtle border, smooth background slide animation.",
+      "theme_toggle": "Circular button with dark navy background #0E1525-#101828, 1-1.5px blue-cyan border #3B82F6-#38BDF8, soft glow drop-shadow, text/icon color #F5F7FA.",
+      "logo_space": "Reserved left-hand slot (w-40 h-8 flex items-center) with placeholder slot '[ANCLORA PURGEDOC]' for future brand asset.",
+      "qa_fixture_loader": "Development mode toggle button with test fixtures loader (preset HR, Legal, Tech Support documents)."
+    }
+  },
+  "typography": {
+    "headings_font": "Outfit, sans-serif",
+    "body_font": "Inter, sans-serif",
+    "mono_font": "JetBrains Mono, monospace",
+    "hierarchy": {
+      "h1_page": "text-3xl sm:text-4xl font-bold tracking-tight",
+      "h2_section": "text-xl sm:text-2xl font-semibold tracking-tight",
+      "h3_card": "text-lg font-medium",
+      "body_main": "text-sm sm:text-base leading-relaxed",
+      "caption": "text-xs font-mono tracking-wide uppercase"
+    }
+  },
+  "layout_and_key_screens": {
+    "desktop_first_policy": "Optimized split-view layout for desktop screens (>1024px) while providing stacked tabs and collapsible drawers for tablet/mobile viewports.",
+    "screens": [
+      {
+        "id": "upload_and_profile_selection",
+        "title": "Document Upload & Profile Selection",
+        "description": "Drag & drop upload zone supporting PDF and DOCX files paired with vertical profile selector cards.",
+        "profiles": [
+          {"id": "rrhh", "name_es": "RRHH / Nomina", "name_en": "HR / Payroll", "detects": "DNI/NIE, SSN, IBAN, Full Names, Salaries, Phone numbers"},
+          {"id": "legal", "name_es": "Legal & Contratos", "name_en": "Legal & Contracts", "detects": "Confidentiality clauses, Corporate Tax IDs (CIF), Signatures, Addresses, Trade Secrets"},
+          {"id": "soporte", "name_es": "Soporte Técnico", "name_en": "Tech Support", "detects": "IP Addresses, API Keys, Passwords, Access Tokens, Internal Hostnames, MAC Addresses"}
+        ]
+      },
+      {
+        "id": "processing_stepper",
+        "title": "Document Processing Stepper",
+        "description": "Real multi-stage processing tracker with live log stream.",
+        "stages": [
+          "1. Native Parsing & Structural Analysis",
+          "2. Local NER & Pattern/Regex Detection",
+          "3. Synchronized Bounding Box Mapping",
+          "4. Fail-Closed Verification Prep"
+        ]
+      },
+      {
+        "id": "review_workspace",
+        "title": "Interactive Redaction Review Workspace",
+        "layout": "2-column split layout (60% Document Viewer Canvas, 40% Matches Review Panel)",
+        "document_viewer_features": [
+          "Native canvas viewer with zoom controls (50% - 200%) and page navigation",
+          "Synchronized interactive bounding box overlays matching detected entities",
+          "Click bounding box on canvas to highlight corresponding review card",
+          "Manual Redaction Tool: Draw custom bounding boxes for custom text/area masking"
+        ],
+        "review_panel_features": [
+          "Match cards grouped by Entity Type (DNI, IBAN, Name, IP, API Key, etc.)",
+          "Confidence score badges (e.g., 98% Confidence, Regex Rule vs Spacy NER)",
+          "Status indicator (Pending, Approved for Purge, Excluded/Preserved)",
+          "Filter controls: Filter by Status, Entity Type, Page Number, Confidence Score",
+          "Bulk Actions: 'Accept All High Confidence', 'Reject All', 'Select Range'",
+          "Keyboard shortcuts (A = Accept, R = Reject, N = Next, P = Prev)"
+        ]
+      },
+      {
+        "id": "confirmation_modal",
+        "title": "Irreversible Purge Confirmation Modal",
+        "description": "Dialog warning user about permanent content removal vs visual overlays, showing exact count of entities to be destroyed.",
+        "actions": ["Cancel & Return to Review", "Confirm & Purge Content Permanently"]
+      },
+      {
+        "id": "purge_processing_and_verification",
+        "title": "Real Content Purge & Fail-Closed Post-Verification Screen",
+        "description": "Flattens PDF/DOCX streams, strips metadata & hidden text layers, then runs automated fail-closed scanner.",
+        "outcomes": [
+          "Pass: Displays green 'Verificado Post-Purga / Purge Verified' badge and SHA-256 fingerprint.",
+          "Fail-Closed: Displays red high-priority alert if residual PII text is detected in the stream, locking export until manually resolved."
+        ]
+      },
+      {
+        "id": "results_and_audit",
+        "title": "Results & Cryptographic Audit Panel",
+        "downloads": [
+          "Purged Document (PDF or DOCX)",
+          "Cryptographic Audit Report (JSON)",
+          "Printable Verification Certificate (PDF)"
+        ]
+      }
+    ]
+  },
+  "testing_and_fixtures": {
+    "dev_fixture_loader": {
+      "enabled_in_dev": true,
+      "button_label": "Cargar Datos de Prueba / Load Test Fixtures",
+      "test_fixtures": [
+        "Sample HR Payroll PDF (NIF, IBAN, Salary)",
+        "Sample Legal Service Agreement DOCX (CIF, Signatures, Addresses)",
+        "Sample Server Log File (IPs, API Tokens, Hostnames)"
+      ]
+    },
+    "data_testid_policy": "EVERY interactive element, state display, modal, and action trigger MUST have explicit data-testid attribute in kebab-case."
+  },
+  "required_test_ids": [
+    "header-logo-slot",
+    "language-toggle-btn",
+    "theme-toggle-btn",
+    "qa-fixtures-btn",
+    "upload-dropzone",
+    "profile-select-rrhh",
+    "profile-select-legal",
+    "profile-select-soporte",
+    "process-document-btn",
+    "stepper-stage-indicator",
+    "doc-viewer-canvas",
+    "doc-zoom-in-btn",
+    "doc-zoom-out-btn",
+    "doc-prev-page-btn",
+    "doc-next-page-btn",
+    "matches-filter-status",
+    "matches-filter-type",
+    "matches-search-input",
+    "accept-all-matches-btn",
+    "reject-all-matches-btn",
+    "match-card-accept-btn",
+    "match-card-reject-btn",
+    "trigger-purge-modal-btn",
+    "confirm-purge-btn",
+    "cancel-purge-btn",
+    "purge-result-verified-badge",
+    "purge-result-fail-closed-alert",
+    "download-purged-doc-btn",
+    "download-audit-json-btn",
+    "download-audit-pdf-btn"
+  ],
+  "accessibility_requirements": {
+    "standard": "WCAG 2.2 AA",
+    "contrast_ratio": "Minimum 4.5:1 for normal text, 3:1 for large text & active borders",
+    "keyboard_nav": "Full tab order support, visible focus rings (ring-2 ring-blue-500 ring-offset-2)",
+    "aria": "Proper aria-expanded on modals, aria-live='polite' for real-time stepper updates, aria-selected on profiles."
+  },
+  "curated_image_assets": [
+    {
+      "url": "https://images.unsplash.com/photo-1562654501-a0ccc0fc3fb1?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1MTN8MHwxfHNlYXJjaHwxfHxkb2N1bWVudCUyMHNlY3VyaXR5JTIwcHJpdmFjeSUyMGNvbXBsaWFuY2UlMjBhdWRpdHxlbnwwfHx8fDE3OTAwODQ1NTV8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Document Security & Privacy Compliance Document Stack",
+      "usage": "Background/hero illustration for sample document workspace"
+    },
+    {
+      "url": "https://images.pexels.com/photos/19825346/pexels-photo-19825346.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Compliance Audit & Verification Context",
+      "usage": "Audit report badge preview asset"
+    }
+  ],
+  "instructions_to_main_agent": [
+    "Follow the React / Tailwind CSS stack in JS format.",
+    "Implement language state (ES/EN) and theme switcher (Dark default) using React Context or standard state.",
+    "Ensure Header follows exact button styling: Pill language button, Circular dark-navy theme button with cyan glow.",
+    "Build real state machine for Document processing (Upload -> Processing Stepper -> Review Workspace -> Modal Confirmation -> Purge Processing -> Final Results).",
+    "Include dev mode fixture loader button so QA can test with preset mock documents instantly.",
+    "Attach data-testid to every interactive component listed in required_test_ids."
+  ]
+}
