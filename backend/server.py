@@ -32,6 +32,7 @@ from backend.services.rules import (
 )
 from backend.models import BatchMetadata
 from backend.services.batch import batch_service, get_batch_config
+from backend.services.csv_audit import generate_batch_audit_csv, generate_batch_audit_entities_csv
 from backend.fixtures_generator import FIXTURES_DIR, generate_all_fixtures
 from backend.services.event_bus import batch_event_bus
 
@@ -418,7 +419,8 @@ async def purge_and_verify_document(doc_id: str):
 
     doc_meta.status = "purging"
     ext = Path(source_file).suffix.lower()
-    purged_filename = f"purged_{doc_meta.filename}"
+    safe_base = "".join(c for c in Path(doc_meta.filename).stem if c.isalnum() or c in ("-", "_")) or "document"
+    purged_filename = f"purged_{safe_base}{ext}"
     purged_path = os.path.join(session_dir, purged_filename)
 
     # 1. Real Redaction
@@ -870,6 +872,37 @@ async def download_batch_audit_pdf(batch_id: str):
     audit_service.generate_batch_audit_pdf(summary, pdf_path)
 
     return FileResponse(pdf_path, filename=f"anclora_batch_{batch_id}_audit.pdf", media_type="application/pdf")
+
+@api_router.get("/batches/{batch_id}/audit.csv")
+async def download_batch_audit_csv_file(batch_id: str):
+    batch = session_store.batches.get(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Lote no encontrado.")
+
+    summary = batch_service.generate_batch_audit_summary(batch_id)
+    batch_dir = session_store.get_batch_dir(batch.session_id, batch_id)
+    csv_path = os.path.join(batch_dir, "batch-audit.csv")
+    csv_content = generate_batch_audit_csv(summary)
+    with open(csv_path, "w", encoding="utf-8") as f:
+        f.write(csv_content)
+
+    return FileResponse(csv_path, filename=f"anclora_batch_{batch_id}_audit.csv", media_type="text/csv; charset=utf-8")
+
+@api_router.get("/batches/{batch_id}/audit-entities.csv")
+async def download_batch_audit_entities_csv_file(batch_id: str):
+    batch = session_store.batches.get(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Lote no encontrado.")
+
+    summary = batch_service.generate_batch_audit_summary(batch_id)
+    batch_dir = session_store.get_batch_dir(batch.session_id, batch_id)
+    csv_path = os.path.join(batch_dir, "batch-audit-entities.csv")
+    entities_csv_content = generate_batch_audit_entities_csv(summary, session_store)
+    with open(csv_path, "w", encoding="utf-8") as f:
+        f.write(entities_csv_content)
+
+    return FileResponse(csv_path, filename=f"anclora_batch_{batch_id}_audit_entities.csv", media_type="text/csv; charset=utf-8")
+
 
 @api_router.get("/batches/{batch_id}/download-zip")
 async def download_batch_zip(batch_id: str):

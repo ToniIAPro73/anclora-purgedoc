@@ -16,6 +16,7 @@ import {
   FileCheck2,
   FileJson,
   Loader2,
+  FileSpreadsheet,
   Filter,
   Eye,
   Activity,
@@ -437,6 +438,15 @@ export const BatchQueueScreen = ({
               >
                 <FileJson className="w-3.5 h-3.5 text-cyan-400" />
                 <span>{t("batch_btn_audit_json")}</span>
+              </a>
+              <a
+                href={`${backendUrl}/api/batches/${batchId}/audit.csv`}
+                data-testid="batch-audit-csv-btn"
+                download
+                className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition-colors"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-cyan-400" />
+                <span>{t("batch_btn_audit_csv")}</span>
               </a>
             </>
           ) : null}

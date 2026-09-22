@@ -22,6 +22,7 @@ from backend.services.rules import CustomRuleset, CustomRule
 from backend.services.event_bus import batch_event_bus
 
 logger = logging.getLogger(__name__)
+from backend.services.csv_audit import generate_batch_audit_csv, generate_batch_audit_entities_csv
 
 # Configurable environment limits
 def get_batch_config():
@@ -289,7 +290,8 @@ class BatchService:
             )
 
             ext = Path(source_file).suffix.lower()
-            purged_filename = f"purged_{doc_meta.filename}"
+            safe_base = "".join(c for c in Path(doc_meta.filename).stem if c.isalnum() or c in ("-", "_")) or "document"
+            purged_filename = f"purged_{safe_base}{ext}"
             purged_path = os.path.join(doc_dir, purged_filename)
 
             try:
@@ -510,9 +512,22 @@ class BatchService:
         batch_audit_pdf_path = os.path.join(batch_dir, "batch-audit.pdf")
         audit_service.generate_batch_audit_pdf(summary_data, batch_audit_pdf_path)
 
+        # Generate Canonical CSV Audits
+        batch_audit_csv_path = os.path.join(batch_dir, "batch-audit.csv")
+        csv_content = generate_batch_audit_csv(summary_data)
+        with open(batch_audit_csv_path, "w", encoding="utf-8") as f:
+            f.write(csv_content)
+
+        batch_audit_entities_csv_path = os.path.join(batch_dir, "batch-audit-entities.csv")
+        entities_csv_content = generate_batch_audit_entities_csv(summary_data, session_store)
+        with open(batch_audit_entities_csv_path, "w", encoding="utf-8") as f:
+            f.write(entities_csv_content)
+
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
             zip_file.write(batch_audit_json_path, arcname="batch-audit.json")
             zip_file.write(batch_audit_pdf_path, arcname="batch-audit.pdf")
+            zip_file.write(batch_audit_csv_path, arcname="batch-audit.csv")
+            zip_file.write(batch_audit_entities_csv_path, arcname="batch-audit-entities.csv")
 
             for doc_id in batch.document_ids:
                 doc = session_store.documents.get(doc_id)
