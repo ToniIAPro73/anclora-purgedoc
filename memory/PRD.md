@@ -9,8 +9,9 @@ Design, implement, test, and deliver end-to-end the production MVP of **Anclora 
 - Custom Ruleset Editor with Regex Test Bench powered by safe `google-re2` against catastrophic backtracking (ReDoS).
 - Sovereign **Batch Document Queue** with controlled concurrency (`BATCH_MAX_CONCURRENT_DOCUMENTS`), per-document independent lifecycle, and fail-closed batch integrity.
 - **Batch Progress Streaming (Server-Sent Events / SSE)**: real-time streaming of batch and document progress phases (`validating`, `extracting`, `ocr_extraction`, `deskew_normalization`, `ner_detection`, `awaiting_review`, `purging`, `verifying`, `generating_audit`, `verified`) with monotonic sequence numbers, ring-buffer history for `Last-Event-ID` reconnection, and strict zero-PII streaming privacy.
+- **Export Audit Batch CSV**: Tabular forensic reports (`batch-audit.csv` and `batch-audit-entities.csv`) adhering strictly to UTF-8 BOM, RFC 4180 standard, formula injection defense (`=`, `+`, `-`, `@`, `\t`, `\r`), and Zero-PII source pseudonymization (`document-XXX.ext`).
 - Automated post-purge fail-closed verification reopening and inspecting the generated file. If any approved sensitive string remains detectable in text, streams, or metadata, the output is blocked.
-- Cryptographic forensic audit generation (individual & batch PDF certificates & structured JSON) with SHA-256 hashes instead of plaintext PII, incorporating deterministic ruleset hashes.
+- Cryptographic forensic audit generation (individual & batch PDF certificates, structured JSON, and tabular CSVs) with SHA-256 hashes instead of plaintext PII, incorporating deterministic ruleset hashes.
 - High-contrast accessible UI with dark default, light/system mode, ES/EN toggle, synchronized document canvas, live worker concurrency meters, and seamless single/batch mode switching.
 
 ---
@@ -35,52 +36,54 @@ Design, implement, test, and deliver end-to-end the production MVP of **Anclora 
 - Controlled concurrency via `asyncio.Semaphore` per batch, parameterized by `BATCH_MAX_CONCURRENT_DOCUMENTS` (default: 2 workers).
 - Configurable limits via environment variables: `BATCH_MAX_DOCUMENTS` (10), `BATCH_MAX_FILE_SIZE_MB` (25MB), `BATCH_MAX_TOTAL_SIZE_MB` (100MB).
 - Strict isolation in `/tmp/anclora-purgedoc/{sessionId}/{batchId}/{documentId}/`.
-- Consolidated `batch-audit.json` and `batch-audit.pdf` detailing original/purged SHA-256 hashes and failure records without ever leaking original plaintext PII.
 - Secure ZIP generation (`anclora-purgedoc-batch-{batchId}.zip`): includes ONLY `verified` documents inside `documents/`; excludes corrupt or failed documents; defeats Zip-Slip attacks via basename sanitization.
 
-### 2.4 Batch Progress Streaming (SSE) — (Iteration 8 Certified)
-- **Decoupled Architecture (`services/event_bus.py`)**:
-  - `BaseEventBus` abstract interface implemented by `InMemoryBatchEventBus` (designed for pluggable future backend migration, e.g. Redis).
-  - Ring buffer history per batch (`max_history_per_batch=500`) with monotonic sequence numbers.
-  - Per-subscriber bounded queue (`maxsize=100`) with oldest-drop policy to protect server memory against slow or stalled consumers.
-- **Streaming Endpoint (`GET /api/batches/{batchId}/events`)**:
-  - SSE standard `text/event-stream` with `id: <sequence>`, `event: <type>`, `data: <json>`.
-  - Replays missed events on client reconnect using `Last-Event-ID` or `?last_event_id=...`.
-  - Periodical keep-alive heartbeat (`: heartbeat ...\n\n`) every 15s to prevent proxy/CDN connection drops.
-  - Validates session and batch ownership for cross-session/cross-batch isolation.
-- **Contract & Typed Events**:
-  - `stream_connected`, `batch_started`, `batch_status_changed`, `document_queued`, `document_status_changed`, `document_awaiting_review`, `document_verified`, `document_verification_failed`, `document_error`, `document_cancelled`, `batch_completed`.
-  - Real operational phases: `validating`, `extracting`, `ocr_extraction`, `deskew_normalization`, `ner_detection`, `awaiting_review`, `purging`, `verifying`, `generating_audit`, `verified`.
-- **Zero-PII Streaming Enforcement**:
-  - Bus-level defensive sanitization: strips any keys matching `{raw_text, extracted_text, ocr_text, text, sensitive_text}`.
-  - Verified by automated adversarial test (`test_event_bus_strict_zero_pii_in_payloads`): asserts no sensitive fixture tokens appear in any serialized SSE event.
-- **Frontend Resilient Integration (`BatchQueueScreen.js`)**:
-  - Live SSE connection indicator (`Stream SSE conectado en vivo`).
-  - Real backend active workers badge (`Workers: X / Y máx`).
-  - Sequence deduplication (`lastSequenceRef`) to prevent redundant renders.
-  - Automatic reconnect with fallback snapshot polling (3.5s) if connection is interrupted.
+### 2.4 Batch Progress Streaming (SSE)
+- Decoupled `InMemoryBatchEventBus` with ring-buffer history (`max_history_per_batch=500`), monotonic sequence numbers, and `Last-Event-ID` replay.
+- Bounded subscriber queues (`maxsize=100`) preventing memory bloat.
+- Periodic keep-alive heartbeats and Zero-PII event sanitization.
+
+### 2.5 Export Audit Batch CSV (Iteration 9 Certified)
+- **Canonical Source of Truth**: Generates directly from `BatchService.generate_batch_audit_summary()`; zero divergence from JSON/PDF audits.
+- **Two Tabular Artifacts**:
+  1. `batch-audit.csv`: Summary row per document with 21 standardized English columns:
+     `batch_id`, `document_id`, `source_filename`, `input_type`, `profile_id`, `profile_version`, `ruleset_id`, `ruleset_version`, `ruleset_hash`, `status`, `verification_status`, `detected_count`, `accepted_count`, `rejected_count`, `pending_count`, `applied_count`, `source_sha256`, `output_sha256`, `started_at`, `completed_at`, `error_code`.
+  2. `batch-audit-entities.csv`: Detailed entity breakdown per document with 7 columns:
+     `batch_id`, `document_id`, `source_filename`, `entity_type`, `detected_count`, `accepted_count`, `rejected_count`.
+- **CSV & Formula Injection Neutralization**:
+  - `sanitize_csv_cell()` inspects values (stripping leading whitespace) and prepends an apostrophe `'` if the cell begins with `=`, `+`, `-`, `@`, `\t`, or `\r`.
+  - Disarms formula execution in Microsoft Excel, LibreOffice Calc, and Google Sheets while keeping text readable.
+- **Zero-PII Pseudonymization**:
+  - To prevent sensitive information leaks in user-provided file names, source filenames are pseudonymized as `document-001.pdf`, `document-002.docx`, etc.
+  - Trazability is maintained via `source_sha256` and `document_id`.
+- **Encoding & Compatibility**:
+  - UTF-8 with Byte Order Mark (`\ufeff`) for direct Excel encoding detection without mojibake.
+  - RFC 4180 compliant with `,` delimiter, `csv.QUOTE_MINIMAL`, and `\r\n` line endings.
+- **Packaging & Delivery**:
+  - Automatically embedded in `anclora-purgedoc-batch-{batchId}.zip`.
+  - Available for direct one-click download via `GET /api/batches/{batch_id}/audit.csv` and `GET /api/batches/{batch_id}/audit-entities.csv`.
 
 ---
 
 ## 3. Test & Verification Status
-- **Backend Tests**: 53/53 tests passing in parallel (`pytest-xdist LoadScope`, ~51s execution).
-  - `backend/tests/test_batch_streaming.py` (5 comprehensive SSE streaming tests)
+- **Backend Tests**: 56/56 tests passing in parallel (`pytest-xdist LoadScope`, ~52s execution).
+  - `backend/tests/test_batch_csv_audit.py` (3 comprehensive tests: formula injection defense, Zero-PII pseudonymization, ZIP inclusion)
+  - `backend/tests/test_batch_streaming.py` (5 SSE streaming tests)
   - `backend/tests/test_batch_pipeline.py` (6 batch queue & isolation tests)
   - `backend/tests/test_custom_rules.py` (8 custom rules tests)
   - `backend/tests/security/` (7 security hardening and adversarial recovery suites)
   - `backend/tests/test_api_e2e.py`, `test_deskew_pipeline.py`, `test_ocr_pipeline.py`, `test_redaction_pipeline.py`
-- **Frontend E2E**: 100% PASS verified via `testing_agent_v3` (Iteration 8 report `/app/test_reports/iteration_8.json`).
-  - Live SSE status badge and active workers concurrency badge.
-  - Multi-upload with real-time status and detailed phase streaming.
-  - Human review navigation, batch purge, and verified outputs.
-  - ZIP and Batch Audit downloads.
-  - Single-document and security hardening non-regression.
+- **Frontend E2E**: 100% PASS verified via `testing_agent_v3` (Iteration 9 report `/app/test_reports/iteration_9.json`).
+  - Multi-upload, concurrent analysis, individual review, and batch purge to verified state.
+  - Visibility and functionality of `Auditoría de Lote (CSV)` button (`batch-audit-csv-btn`).
+  - Direct HTTP validation of UTF-8 BOM, headers, and per-entity metrics.
+  - ZIP verification ensuring all 4 audit artifacts (`.json`, `.pdf`, `.csv`, `-entities.csv`) and only verified outputs are packaged.
 
 ---
 
 ## 4. Current Limitations & Technical Debt
 1. **App.js & server.py file size**:
-   - `server.py` and `App.js` have grown as batch features expanded. Future refactoring should modularize into FastAPI APIRouters (`routes/batch.py`, `routes/documents.py`, `routes/rules.py`, `routes/sessions.py`).
+   - `server.py` and `App.js` have expanded to support batch orchestration and CSV streaming endpoints. Future refactoring should modularize into FastAPI APIRouters (`routes/batch.py`, `routes/documents.py`, `routes/rules.py`, `routes/sessions.py`).
 2. **Client-side Ruleset Scope**:
    - Custom rules remain stored in browser `localStorage`.
 3. **Session Download Endpoints**:

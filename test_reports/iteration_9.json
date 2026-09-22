@@ -1,0 +1,26 @@
+{
+  "summary": "Full-stack E2E validation of Batch CSV Audit extension. Backend: 56/56 pytest cases PASS in 51.89s including 3 new CSV tests (test_csv_formula_injection_defense, test_csv_batch_audit_zero_pii_and_pseudonymization, test_csv_audit_files_in_batch_zip). Frontend: complete batch workflow validated on preview URL — batch mode toggle -> multi-upload (2 PDFs via batch-file-input state=attached) -> start-batch-analysis-btn -> review each doc (review-doc-btn-*, accept-all-matches-btn, back-to-batch-queue-btn) -> batch-purge-ready-btn -> both docs Verificado -> new batch-audit-csv-btn ('Auditoría de Lote (CSV)') visible alongside batch-download-zip-btn, batch-audit-pdf-btn, batch-audit-json-btn. HTTP verification: GET /api/batches/{id}/audit.csv returns 200 text/csv;charset=utf-8 with content-disposition attachment, UTF-8 BOM (\\ufeff) prefix, CRLF line terminators, and all 21 technical English headers (batch_id, document_id, source_filename, input_type, profile_id, profile_version, ruleset_id, ruleset_version, ruleset_hash, status, verification_status, detected_count, accepted_count, rejected_count, pending_count, applied_count, source_sha256, output_sha256, started_at, completed_at, error_code). GET /api/batches/{id}/audit-entities.csv returns 200 with 7 headers (batch_id, document_id, source_filename, entity_type, detected_count, accepted_count, rejected_count) and per-entity breakdown (ADDRESS, DNI_NIE_NIF, EMAIL, IBAN, PHONE, FINANCIAL_AMOUNT, CUSTOM_IDENTIFIER). Zero-PII: source filenames pseudonymized as document-001.pdf/document-002.pdf; unit test verifies sensitive fixture tokens (12345678Z, Carmenchu, García Moreno, ES91 2100 0418 4502 0005 1332) never leak. Formula injection: unit test asserts every adversarial input (=HYPERLINK, +SUM, @SUM, -100*5, \\t=, \\r=, leading-space +/@) is prefixed with single quote. ZIP integrity: /api/batches/{id}/download-zip yields archive containing batch-audit.csv AND batch-audit-entities.csv alongside batch-audit.json, batch-audit.pdf, documents/*, audits/*.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_batch_csv_audit.py",
+    "/app/test_reports/pytest/iteration_9_all.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "csv_audit.py::sanitize_csv_cell correctly checks lstripped first char against {=,+,-,@,\\t,\\r} and prefixes with single quote; RFC 4180 compliant via csv.QUOTE_MINIMAL + lineterminator='\\r\\n'.",
+    "generate_batch_audit_csv writes UTF-8 BOM via '\\ufeff' and pseudonymizes source_filename to document-{idx:03d}.{ext} — zero PII by construction regardless of original user filename.",
+    "server.py FileResponse uses media_type='text/csv; charset=utf-8' and correct attachment filename; endpoints at /api/batches/{id}/audit.csv and /api/batches/{id}/audit-entities.csv are properly registered under api_router.",
+    "BatchQueueScreen.js: batch-audit-csv-btn <a> href uses backendUrl env var, has download attribute, and renders only when all documents verified — consistent with existing zip/pdf/json buttons.",
+    "batch.py build_batch_zip includes both CSV files in the archive alongside batch-audit.json and batch-audit.pdf.",
+    "Minor (non-blocking, carry-over): App.js still has http://localhost:8001 fallback for REACT_APP_BACKEND_URL — violates fail-fast env policy but out of scope for this feature."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (56/56)", "frontend": "100% (batch CSV E2E: upload -> analyze -> review both -> purge -> 4 audit buttons visible with correct hrefs; CSV endpoints return valid BOM CSV; ZIP includes both CSVs)"},
+  "test_credentials": "N/A",
+  "seed_data_creation": "Batch created via multi-upload of /app/backend/fixtures/{sample_rrhh_payroll.pdf, sample_soporte_incident.pdf}; batch_id=cd04e187-4ced-45fa-a149-d35a424227d8 (transient, auto-cleaned on session TTL).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Regression: `PYTHONPATH=/app python -m pytest backend/tests/ -v` (56 tests ~52s). When reviewing multiple docs sequentially via Playwright, the 'Revisar' button remains visible even for verified docs — do NOT rely on .first, iterate over the initial list of data-testid values from element_handles() to review each doc exactly once. All 4 audit buttons (ZIP/PDF/JSON/CSV) only render when every doc is verified.",
+  "rca of the issue": "No bugs found. Feature works end-to-end as specified."
+}

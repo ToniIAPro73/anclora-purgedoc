@@ -1,7 +1,7 @@
 # ANCLORA PURGEDOC — ARQUITECTURA TÉCNICA
 
 ## 1. Visión General
-**Anclora Purgedoc** es una plataforma de ingeniería documental para la purga y redacción física real, privada y verificada de datos sensibles en archivos PDF y DOCX, tanto en procesamiento individual como en cola de procesamiento por lotes (*Batch Document Queue*) con monitorización en tiempo real mediante *Batch Progress Streaming (SSE)*.
+**Anclora Purgedoc** es una plataforma de ingeniería documental para la purga y redacción física real, privada y verificada de datos sensibles en archivos PDF y DOCX, tanto en procesamiento individual como en cola de procesamiento por lotes (*Batch Document Queue*) con monitorización en tiempo real mediante *Batch Progress Streaming (SSE)* y exportación forense tabular en *CSV*.
 
 ```mermaid
 graph TD
@@ -23,7 +23,7 @@ graph TD
     M -->|Test de ausencia en stream y metadatos| N{¿Supera verificación?}
     N -->|SÍ| O[Estado: verified + Certificado Auditoría Individual]
     N -->|NO| P[Estado: verification_failed / Bloqueo Fail-Closed]
-    O --> Q[Batch Audit Consolidado + ZIP Seguro]
+    O --> Q[Batch Audit Consolidado: JSON + PDF + CSV + ZIP Seguro]
     P --> Q
 
     E -.->|Eventos de Estado y Fases| EB[BatchEventBus In-Memory]
@@ -36,32 +36,53 @@ graph TD
 1. **Zero External AI / Cloud**: Ningún dato, fragmento, imagen o metadato se transmite a LLMs remotos ni APIs externas. 100% de la computación es local (spaCy, Tesseract, OpenCV, PyMuPDF, python-docx).
 2. **Ciclo de vida efímero**: Los archivos se procesan en `/tmp/anclora-purgedoc/{session_id}/{batch_id}/{document_id}/` con TTL configurable y borrado explícito. No existe base de datos permanente de documentos ni de contenido sensible.
 3. **Auditoría Forense Criptográfica**: Las auditorías individuales y de lote nunca registran el texto sensible en texto plano, sino su hash SHA-256 (`sha256:...`).
-4. **Zero-PII en Streaming SSE**: Los eventos transmitidos por SSE contienen únicamente identificadores opacos, estados, fases operativas reales y contadores. Cero texto plano, cero fragmentos de OCR y cero valores detectados.
+4. **Zero-PII en Streaming y Exportaciones Tabulares (CSV)**:
+   - Los nombres de archivo se pseudonimizan como `document-001.pdf` en CSV para evitar filtraciones de PII a través de nombres personales.
+   - Trazabilidad preservada estrictamente mediante `source_sha256` y `document_id`.
 
 ---
 
-## 3. Arquitectura del Event Bus y Streaming SSE
+## 3. Especificación de Exportación Tabular CSV
 
-### 3.1 Abstracción de Event Bus (`services/event_bus.py`)
-- **Diseño Desacoplado**: Clase abstracta `BaseEventBus` con implementación `InMemoryBatchEventBus` para permitir reemplazo transparente por Redis u otro broker en el futuro.
-- **Secuencia Monotónica**: Cada evento asigna un entero incremental estricto (`sequence: int`) por lote.
-- **Búfer de Historial Ring-Buffer**: Mantiene hasta 500 eventos en memoria por lote para soportar reconexiones robustas con `Last-Event-ID`.
-- **Protección de Consumidores Lentos**: Colas `asyncio.Queue` acotadas (`maxsize=100`) con política de descarte del elemento más antiguo para prevenir consumo desmedido de memoria.
-- **Aislamiento Estricto**: Validación de pertenencia del lote a la sesión solicitada; los suscriptores solo reciben eventos de su lote específico.
+### 3.1 Esquemas Técnicos Estables (en inglés)
+1. **Resumen de Documentos (`batch-audit.csv`)**:
+   - `batch_id`
+   - `document_id`
+   - `source_filename` (pseudonimizado: `document-XXX.ext`)
+   - `input_type` (`PDF` / `DOCX`)
+   - `profile_id` (`rrhh`, `legal`, `soporte`)
+   - `profile_version`
+   - `ruleset_id`
+   - `ruleset_version`
+   - `ruleset_hash`
+   - `status` (`verified`, `verification_failed`, `error`, `cancelled`)
+   - `verification_status` (`verified`, `failed`, `unverified`)
+   - `detected_count`
+   - `accepted_count`
+   - `rejected_count`
+   - `pending_count`
+   - `applied_count`
+   - `source_sha256`
+   - `output_sha256`
+   - `started_at`
+   - `completed_at`
+   - `error_code`
 
-### 3.2 Endpoint SSE (`GET /api/batches/{batchId}/events`)
-- Formato estándar Server-Sent Events (`text/event-stream`):
-  ```text
-  id: 4
-  event: document_status_changed
-  data: {"eventId":"evt_b1_4","sequence":4,"batchId":"b1","documentId":"d1","type":"document_status_changed","status":"analyzing","phase":"ocr_extraction","timestamp":"2026-09-22T20:15:00Z","schemaVersion":1,"payload":{"filename":"sample.pdf","isScanned":true}}
-  ```
-- Replay automático de eventos pendientes si el cliente envía `Last-Event-ID` o `?last_event_id=...`.
-- Heartbeat periódico cada 15 segundos (`: heartbeat ...`) para evitar cierres de conexión por parte de balanceadores o proxies.
-- Snapshot REST de respaldo disponible mediante `GET /api/batches/{batchId}` para reconciliación en caso de fallo de red prolongado.
+2. **Detalle por Entidad (`batch-audit-entities.csv`)**:
+   - `batch_id`
+   - `document_id`
+   - `source_filename`
+   - `entity_type`
+   - `detected_count`
+   - `accepted_count`
+   - `rejected_count`
+
+### 3.2 Estrategia Anti-Inyección de Fórmulas (CSV / Formula Injection)
+- Cualquier valor de celda que comience por `=`, `+`, `-`, `@`, `\t` o `\r` (incluso tras espacios en blanco iniciales) se neutraliza anteponiendo un apóstrofe `'`.
+- Formato estándar RFC 4180 con comillas mínimas (`csv.QUOTE_MINIMAL`), saltos de línea CRLF (`\r\n`) y codificación UTF-8 con BOM (`\ufeff`) para visualización instantánea y sin problemas de encoding en Microsoft Excel, LibreOffice y Google Sheets.
 
 ---
 
 ## 4. Limitaciones Conocidas y Deuda Técnica
-1. **Modularidad del Backend**: `server.py` agrupa endpoints individuales, de lote y de streaming. Se recomienda separar en sub-módulos (`backend/routes/batch.py`, `backend/routes/documents.py`, `backend/routes/rules.py`).
+1. **Modularidad del Backend**: `server.py` agrupa endpoints individuales, de lote, de streaming y exportación CSV. Se recomienda separar en sub-módulos (`backend/routes/batch.py`, `backend/routes/documents.py`, `backend/routes/rules.py`).
 2. **Modularidad del Frontend**: `App.js` gestiona tanto el flujo individual como el selector de lote. Se recomienda extraer el contexto del lote en un hook dedicado si se amplían las funcionalidades.
