@@ -212,4 +212,127 @@ class AuditService:
 
         doc.build(elements)
 
+    def generate_batch_audit_pdf(self, summary: Dict[str, Any], output_pdf_path: str):
+        """Generates structured batch forensic audit PDF certificate."""
+        doc = SimpleDocTemplate(
+            output_pdf_path,
+            pagesize=letter,
+            rightMargin=36,
+            leftMargin=36,
+            topMargin=36,
+            bottomMargin=36
+        )
+
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'BatchAuditTitle',
+            parent=styles['Heading1'],
+            fontName='Helvetica-Bold',
+            fontSize=16,
+            leading=20,
+            textColor=colors.HexColor('#0F172A')
+        )
+        subtitle_style = ParagraphStyle(
+            'BatchAuditSubTitle',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=9,
+            leading=13,
+            textColor=colors.HexColor('#64748B')
+        )
+        body_style = ParagraphStyle(
+            'BatchAuditBody',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=8,
+            leading=11,
+            textColor=colors.HexColor('#1E293B')
+        )
+
+        elements = []
+        elements.append(Paragraph("ANCLORA PURGEDOC — CERTIFICADO DE AUDITORÍA DE LOTE (BATCH AUDIT)", title_style))
+        elements.append(Paragraph(f"Batch ID: {summary['batch_id']} | Sesión: {summary['session_id']} | Fecha: {summary['completed_at']}", subtitle_style))
+        elements.append(Spacer(1, 8))
+        elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#0284C7'), spaceBefore=4, spaceAfter=12))
+
+        b_status = summary.get("batch_status", "draft")
+        if b_status == "completed_verified":
+            status_color = colors.HexColor('#059669')
+            status_text = "ESTADO DEL LOTE: VERIFICADO AL 100% — TODOS LOS DOCUMENTOS EXPUNGIDOS"
+        elif b_status == "completed_with_errors":
+            status_color = colors.HexColor('#D97706')
+            status_text = "ESTADO DEL LOTE: COMPLETADO CON ERRORES PARCIALES — REVISIÓN REQUERIDA"
+        elif b_status == "cancelled":
+            status_color = colors.HexColor('#64748B')
+            status_text = "ESTADO DEL LOTE: CANCELADO"
+        else:
+            status_color = colors.HexColor('#0284C7')
+            status_text = f"ESTADO DEL LOTE: {b_status.upper()}"
+
+        banner_table = Table([[Paragraph(f"<b>{status_text}</b>", ParagraphStyle('BB', parent=body_style, textColor=colors.white, alignment=1, fontSize=9))]], colWidths=[540])
+        banner_table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), status_color),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('TOPPADDING', (0,0), (-1,-1), 5),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+        ]))
+        elements.append(banner_table)
+        elements.append(Spacer(1, 10))
+
+        m = summary.get("metrics", {})
+        metrics_data = [
+            ["Total Documentos:", str(m.get("total_documents", 0)), "Verificados:", str(m.get("verified", 0))],
+            ["Fallos Verificación:", str(m.get("verification_failed", 0)), "Errores de Procesamiento:", str(m.get("error", 0))],
+            ["Cancelados:", str(m.get("cancelled", 0)), "Pendientes:", str(m.get("pending", 0))],
+            ["Total Purgados:", str(m.get("total_matches_purged", 0)), "Total Rechazados:", str(m.get("total_matches_rejected", 0))]
+        ]
+        t = Table(metrics_data, colWidths=[130, 140, 130, 140])
+        t.setStyle(TableStyle([
+            ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0), (-1,-1), 8),
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F8FAFC')),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
+            ('PADDING', (0,0), (-1,-1), 3),
+        ]))
+        elements.append(t)
+        elements.append(Spacer(1, 12))
+
+        elements.append(Paragraph("<b>Resumen por Documento en el Lote</b> (Salida verificada y hashes criptográficos):", body_style))
+        elements.append(Spacer(1, 5))
+
+        doc_rows = [["Documento", "Perfil", "Estado", "Detect.", "Purg.", "SHA-256 Original", "SHA-256 Purgado"]]
+        for d in summary.get("documents", [])[:35]:
+            out_hash = (d.get("output_sha256") or "N/A")[:14] + "..." if d.get("output_sha256") else "N/A (Bloqueado)"
+            src_hash = (d.get("source_sha256") or "N/A")[:14] + "..."
+            doc_rows.append([
+                d.get("filename", "doc")[:20],
+                d.get("profile_id", "rrhh").upper(),
+                d.get("status", "unknown"),
+                str(d.get("matches_count", 0)),
+                str(d.get("accepted_count", 0)),
+                src_hash,
+                out_hash
+            ])
+
+        if len(doc_rows) == 1:
+            doc_rows.append(["Sin documentos", "-", "-", "-", "-", "-", "-"])
+
+        docs_table = Table(doc_rows, colWidths=[110, 45, 80, 35, 35, 115, 120])
+        docs_table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0F172A')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0), (-1,-1), 7),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
+            ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#F8FAFC')]),
+            ('PADDING', (0,0), (-1,-1), 3),
+        ]))
+        elements.append(docs_table)
+        elements.append(Spacer(1, 12))
+
+        elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor('#CBD5E1'), spaceBefore=8, spaceAfter=6))
+        elements.append(Paragraph("<b>Garantía Fail-Closed:</b> En descargas de lote ZIP, únicamente se incluyen los archivos con estado 'verified'. Documentos fallidos son bloqueados y registrados con hash criptográfico sin exposición de datos.", subtitle_style))
+
+        doc.build(elements)
+
 audit_service = AuditService()

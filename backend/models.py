@@ -37,13 +37,16 @@ class MatchItem(BaseModel):
 class DocumentMetadata(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str
+    batch_id: Optional[str] = None
     filename: str
     mime_type: str
     size_bytes: int
     uploaded_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     profile_id: str
     source_sha256: str
-    status: str = "uploaded"  # uploaded | analyzing | ready_for_review | purging | verified | verification_failed | error
+    # Document independent status lifecycle:
+    # queued | validating | analyzing | awaiting_review | ready_to_purge | purging | verifying | verified | verification_failed | error | cancelled
+    status: str = "uploaded"
     page_count: int = 1
     has_text_layer: bool = True
     is_scanned_ocr: bool = False
@@ -51,6 +54,18 @@ class DocumentMetadata(BaseModel):
     output_filename: Optional[str] = None
     output_sha256: Optional[str] = None
     verified_at: Optional[str] = None
+
+class BatchMetadata(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    session_id: str
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    default_profile_id: str = "rrhh"
+    # Batch status: draft | processing | awaiting_review | completed_verified | completed_with_errors | cancelled
+    status: str = "draft"
+    document_ids: List[str] = Field(default_factory=list)
+    ruleset_id: Optional[str] = "custom_ruleset"
+    ruleset_version: Optional[str] = "1.0.0"
+    completed_at: Optional[str] = None
 
 def hash_text(text: str) -> str:
     cleaned = text.strip()

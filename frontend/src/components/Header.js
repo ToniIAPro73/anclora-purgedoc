@@ -2,7 +2,14 @@ import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { ShieldCheck, Moon, Sun, Monitor, Globe, FileCode2, Check, Sliders } from "lucide-react";
 
-export const Header = ({ onOpenDevFixtures, onOpenRulesEditor, customRulesCount = 0 }) => {
+import { Layers } from "lucide-react";
+export const Header = ({
+  onOpenDevFixtures,
+  onOpenRulesEditor,
+  customRulesCount = 0,
+  activeMode = "single",
+  onToggleMode
+}) => {
   const { themeMode, setThemeMode, cycleTheme, lang, toggleLanguage, t } = useApp();
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
 
@@ -33,6 +40,23 @@ export const Header = ({ onOpenDevFixtures, onOpenRulesEditor, customRulesCount 
         {/* Right Controls: Custom Rules + Dev Fixtures + ES/EN Pill + Circular Theme Switcher */}
         <div className="flex items-center gap-3">
           
+          {/* Mode Switcher: Single vs Batch */}
+          {onToggleMode && (
+            <button
+              type="button"
+              data-testid="toggle-batch-mode-btn"
+              onClick={onToggleMode}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full transition-all shadow-sm ${
+                activeMode === "batch"
+                  ? "bg-cyan-500 text-slate-950 font-bold border border-cyan-400"
+                  : "bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 hover:border-cyan-500/40"
+              }`}
+              title="Cambiar entre modo Individual y Procesamiento por Lotes"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>{t("batch_mode_btn")}</span>
+            </button>
+          )}
           {/* Custom Rules Button */}
           {onOpenRulesEditor && (
             <button

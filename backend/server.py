@@ -1,4 +1,5 @@
 import os
+import asyncio
 import io
 import sys
 import json
@@ -28,6 +29,8 @@ from backend.services.rules import (
     CustomRule, CustomRuleset, RegexValidator,
     RuleValidationResult, RuleTestResponse
 )
+from backend.models import BatchMetadata
+from backend.services.batch import batch_service, get_batch_config
 from backend.fixtures_generator import FIXTURES_DIR, generate_all_fixtures
 
 logger = logging.getLogger(__name__)
@@ -94,6 +97,23 @@ class TestRulePayload(BaseModel):
 class ValidateRegexPayload(BaseModel):
     pattern: str
     case_sensitive: bool = False
+
+class CreateBatchPayload(BaseModel):
+    default_profile_id: Optional[str] = "rrhh"
+    custom_rules: Optional[List[CustomRule]] = None
+    ruleset_id: Optional[str] = "custom_ruleset"
+    ruleset_version: Optional[str] = "1.0.0"
+
+class UpdateBatchDocumentProfilePayload(BaseModel):
+    profile_id: str
+
+class StartBatchAnalysisPayload(BaseModel):
+    custom_rules: Optional[List[CustomRule]] = None
+    ruleset_id: Optional[str] = "custom_ruleset"
+    ruleset_version: Optional[str] = "1.0.0"
+
+class StartBatchPurgePayload(BaseModel):
+    document_ids: Optional[List[str]] = None
 
 # ----------------- Routes -----------------
 
@@ -466,5 +486,347 @@ async def download_audit_pdf(doc_id: str):
     if not pdf_path or not os.path.exists(pdf_path):
         raise HTTPException(status_code=404, detail="Certificado de auditoría PDF no disponible.")
     return FileResponse(pdf_path, filename=f"audit_{doc_id}.pdf", media_type="application/pdf")
+
+
+# ----------------- Batch Processing Endpoints -----------------
+
+@api_router.get("/batch/config")
+async def get_batch_configuration():
+    return get_batch_config()
+
+@api_router.post("/sessions/{session_id}/batches")
+async def create_batch(session_id: str, payload: Optional[CreateBatchPayload] = None):
+    session_store.touch_session(session_id)
+    batch_id = str(uuid.uuid4())
+    default_profile = payload.default_profile_id if payload else "rrhh"
+    ruleset_id = payload.ruleset_id if payload else "custom_ruleset"
+    ruleset_ver = payload.ruleset_version if payload else "1.0.0"
+    custom_rules = payload.custom_rules if payload else None
+
+    batch_meta = BatchMetadata(
+        id=batch_id,
+        session_id=session_id,
+        default_profile_id=default_profile,
+        ruleset_id=ruleset_id,
+        ruleset_version=ruleset_ver,
+        status="draft"
+    )
+    session_store.batches[batch_id] = batch_meta
+    session_store.get_batch_dir(session_id, batch_id)
+
+    # Register ruleset overlay for batch
+    batch_service.set_batch_ruleset(batch_id, custom_rules, ruleset_id=ruleset_id, version=ruleset_ver)
+
+    return batch_meta.model_dump()
+
+@api_router.get("/batches/{batch_id}")
+async def get_batch_details(batch_id: str):
+    batch = session_store.batches.get(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Lote no encontrado.")
+
+    # Re-compute composite status
+    batch.status = batch_service.compute_batch_status(batch)
+    docs_list = []
+    for d_id in batch.document_ids:
+        d = session_store.documents.get(d_id)
+        if not d:
+            continue
+        d_matches = list(session_store.matches.get(d_id, {}).values())
+        paths = session_store.doc_file_paths.get(d_id, {})
+        docs_list.append({
+            **d.model_dump(),
+            "matches_count": len(d_matches),
+            "accepted_count": sum(1 for m in d_matches if m.status in {"accepted", "applied"}),
+            "rejected_count": sum(1 for m in d_matches if m.status == "rejected"),
+            "pending_count": sum(1 for m in d_matches if m.status == "pending"),
+            "has_purged": bool(paths.get("purged") and os.path.exists(paths.get("purged"))),
+            "has_audit": bool(paths.get("audit_json") and os.path.exists(paths.get("audit_json")))
+        })
+
+    config = get_batch_config()
+    total_bytes = sum(d["size_bytes"] for d in docs_list)
+
+    return {
+        "batch": batch.model_dump(),
+        "documents": docs_list,
+        "limits": {
+            **config,
+            "current_documents_count": len(docs_list),
+            "current_total_bytes": total_bytes
+        }
+    }
+
+@api_router.post("/batches/{batch_id}/documents")
+async def upload_documents_to_batch(
+    batch_id: str,
+    files: List[UploadFile] = File(...),
+    profile_id: Optional[str] = Form(None)
+):
+    batch = session_store.batches.get(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Lote no encontrado.")
+
+    if batch.status not in ["draft", "awaiting_review"]:
+        raise HTTPException(status_code=400, detail="No se pueden añadir documentos a un lote en proceso o cerrado.")
+
+    config = get_batch_config()
+    current_docs = [session_store.documents.get(d_id) for d_id in batch.document_ids if session_store.documents.get(d_id)]
+    
+    if len(current_docs) + len(files) > config["max_documents"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Límite excedido: El lote permite un máximo de {config['max_documents']} documentos."
+        )
+
+    current_total_bytes = sum(d.size_bytes for d in current_docs)
+    max_total_bytes = config["max_total_size_mb"] * 1024 * 1024
+    max_file_bytes = config["max_file_size_mb"] * 1024 * 1024
+
+    uploaded_docs = []
+    chosen_profile = profile_id or batch.default_profile_id
+
+    for file in files:
+        filename = file.filename or "uploaded_batch_doc"
+        ext = Path(filename).suffix.lower()
+        if ext not in [".pdf", ".docx"]:
+            raise HTTPException(status_code=400, detail=f"Formato no soportado para '{filename}'. Debe ser .pdf o .docx.")
+
+        content_bytes = await file.read()
+        file_size = len(content_bytes)
+
+        if file_size > max_file_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail=f"El archivo '{filename}' ({round(file_size/(1024*1024), 2)} MB) excede el tamaño máximo permitido por archivo ({config['max_file_size_mb']} MB)."
+            )
+
+        if current_total_bytes + file_size > max_total_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail=f"El tamaño total del lote excede el límite máximo agregado permitido ({config['max_total_size_mb']} MB)."
+            )
+
+        current_total_bytes += file_size
+        doc_id = str(uuid.uuid4())
+        doc_dir = session_store.get_document_dir(batch.session_id, batch_id, doc_id)
+        store_in_memory_session(doc_id, content_bytes)
+        dest_file = os.path.join(doc_dir, f"{doc_id}_{filename}")
+        shutil.copyfileobj(io.BytesIO(content_bytes), open(dest_file, "wb"))
+
+        source_sha = calculate_file_sha256(dest_file)
+        mime = "application/pdf" if ext == ".pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+        doc_meta = DocumentMetadata(
+            id=doc_id,
+            session_id=batch.session_id,
+            batch_id=batch_id,
+            filename=filename,
+            mime_type=mime,
+            size_bytes=file_size,
+            profile_id=chosen_profile,
+            source_sha256=source_sha,
+            status="queued"
+        )
+
+        session_store.documents[doc_id] = doc_meta
+        session_store.doc_file_paths[doc_id] = {
+            "source": dest_file,
+            "preview_pdf": dest_file if ext == ".pdf" else None
+        }
+        batch.document_ids.append(doc_id)
+        uploaded_docs.append(doc_meta.model_dump())
+
+    batch.status = batch_service.compute_batch_status(batch)
+    return {"uploaded_count": len(uploaded_docs), "documents": uploaded_docs}
+
+@api_router.patch("/batches/{batch_id}/documents/{doc_id}/profile")
+async def update_batch_document_profile(batch_id: str, doc_id: str, payload: UpdateBatchDocumentProfilePayload):
+    batch = session_store.batches.get(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Lote no encontrado.")
+
+    doc = session_store.documents.get(doc_id)
+    if not doc or doc.batch_id != batch_id:
+        raise HTTPException(status_code=404, detail="Documento no encontrado en este lote.")
+
+    if doc.status not in ["queued", "uploaded", "awaiting_review"]:
+        raise HTTPException(status_code=400, detail="No se puede cambiar el perfil de un documento en análisis o purgado.")
+
+    doc.profile_id = payload.profile_id
+    return doc.model_dump()
+
+@api_router.delete("/batches/{batch_id}/documents/{doc_id}")
+async def remove_document_from_batch(batch_id: str, doc_id: str):
+    batch = session_store.batches.get(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Lote no encontrado.")
+
+    if doc_id not in batch.document_ids:
+        raise HTTPException(status_code=404, detail="Documento no pertenece al lote.")
+
+    doc = session_store.documents.get(doc_id)
+    if doc and doc.status in ["analyzing", "purging"]:
+        raise HTTPException(status_code=400, detail="No se puede eliminar un documento que está en proceso.")
+
+    batch.document_ids.remove(doc_id)
+    session_store.cleanup_document(doc_id)
+    batch.status = batch_service.compute_batch_status(batch)
+
+    return {"status": "removed", "document_id": doc_id, "remaining": len(batch.document_ids)}
+
+@api_router.post("/batches/{batch_id}/documents/{doc_id}/cancel")
+async def cancel_batch_document(batch_id: str, doc_id: str):
+    batch = session_store.batches.get(batch_id)
+    if not batch or doc_id not in batch.document_ids:
+        raise HTTPException(status_code=404, detail="Documento no pertenece al lote.")
+
+    doc = session_store.documents.get(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado.")
+
+    # Clean partial output if any was created
+    paths = session_store.doc_file_paths.get(doc_id, {})
+    purged_path = paths.pop("purged", None)
+    if purged_path and os.path.exists(purged_path):
+        try:
+            os.remove(purged_path)
+        except Exception:
+            pass
+
+    doc.status = "cancelled"
+    batch.status = batch_service.compute_batch_status(batch)
+    return {"status": "cancelled", "document_id": doc_id}
+
+@api_router.post("/batches/{batch_id}/cancel")
+async def cancel_entire_batch(batch_id: str):
+    batch = session_store.batches.get(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Lote no encontrado.")
+
+    batch.status = "cancelled"
+    for d_id in batch.document_ids:
+        doc = session_store.documents.get(d_id)
+        if doc and doc.status != "verified":
+            doc.status = "cancelled"
+            paths = session_store.doc_file_paths.get(d_id, {})
+            purged_path = paths.pop("purged", None)
+            if purged_path and os.path.exists(purged_path):
+                try:
+                    os.remove(purged_path)
+                except Exception:
+                    pass
+
+    return {"status": "cancelled", "batch_id": batch_id}
+
+@api_router.post("/batches/{batch_id}/analyze")
+async def start_batch_analysis(batch_id: str, payload: Optional[StartBatchAnalysisPayload] = None):
+    batch = session_store.batches.get(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Lote no encontrado.")
+
+    if not batch.document_ids:
+        raise HTTPException(status_code=400, detail="El lote no contiene documentos para analizar.")
+
+    if payload and payload.custom_rules is not None:
+        batch_service.set_batch_ruleset(
+            batch_id, payload.custom_rules,
+            ruleset_id=payload.ruleset_id or batch.ruleset_id,
+            version=payload.ruleset_version or batch.ruleset_version
+        )
+
+    # Mark queued documents
+    docs_to_analyze = []
+    for d_id in batch.document_ids:
+        d = session_store.documents.get(d_id)
+        if d and d.status in ["queued", "uploaded", "error"]:
+            d.status = "queued"
+            docs_to_analyze.append(d.id)
+
+    batch.status = "processing"
+
+    # Concurrency-controlled execution using semaphore inside batch_service
+    tasks = [batch_service.analyze_document_in_batch(doc_id, batch_id) for doc_id in docs_to_analyze]
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+    batch.status = batch_service.compute_batch_status(batch)
+    return await get_batch_details(batch_id)
+
+@api_router.post("/batches/{batch_id}/purge")
+async def start_batch_purge(batch_id: str, payload: Optional[StartBatchPurgePayload] = None):
+    batch = session_store.batches.get(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Lote no encontrado.")
+
+    # Target documents: if payload provided, use that; otherwise all ready/review documents
+    if payload and payload.document_ids:
+        target_doc_ids = [d_id for d_id in payload.document_ids if d_id in batch.document_ids]
+    else:
+        target_doc_ids = []
+        for d_id in batch.document_ids:
+            doc = session_store.documents.get(d_id)
+            if not doc or doc.status in ["verified", "cancelled", "error"]:
+                continue
+            # Safe purge: can purge if pending matches count == 0
+            d_matches = list(session_store.matches.get(d_id, {}).values())
+            pending_count = sum(1 for m in d_matches if m.status == "pending")
+            if pending_count == 0:
+                target_doc_ids.append(d_id)
+
+    if not target_doc_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="No hay documentos listos para purgar (comprueba que no queden coincidencias en estado 'pending')."
+        )
+
+    batch.status = "processing"
+    tasks = [batch_service.purge_document_in_batch(doc_id, batch_id) for doc_id in target_doc_ids]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    batch.status = batch_service.compute_batch_status(batch)
+    return await get_batch_details(batch_id)
+
+@api_router.get("/batches/{batch_id}/audit.json")
+async def download_batch_audit_json(batch_id: str):
+    batch = session_store.batches.get(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Lote no encontrado.")
+
+    summary = batch_service.generate_batch_audit_summary(batch_id)
+    batch_dir = session_store.get_batch_dir(batch.session_id, batch_id)
+    json_path = os.path.join(batch_dir, "batch-audit.json")
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2, ensure_ascii=False)
+
+    return FileResponse(json_path, filename=f"anclora_batch_{batch_id}_audit.json", media_type="application/json")
+
+@api_router.get("/batches/{batch_id}/audit.pdf")
+async def download_batch_audit_pdf(batch_id: str):
+    batch = session_store.batches.get(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Lote no encontrado.")
+
+    summary = batch_service.generate_batch_audit_summary(batch_id)
+    batch_dir = session_store.get_batch_dir(batch.session_id, batch_id)
+    pdf_path = os.path.join(batch_dir, "batch-audit.pdf")
+    audit_service.generate_batch_audit_pdf(summary, pdf_path)
+
+    return FileResponse(pdf_path, filename=f"anclora_batch_{batch_id}_audit.pdf", media_type="application/pdf")
+
+@api_router.get("/batches/{batch_id}/download-zip")
+async def download_batch_zip(batch_id: str):
+    batch = session_store.batches.get(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="Lote no encontrado.")
+
+    zip_path = batch_service.build_batch_zip(batch_id)
+    if not os.path.exists(zip_path):
+        raise HTTPException(status_code=500, detail="Error al generar archivo ZIP del lote.")
+
+    return FileResponse(
+        zip_path,
+        filename=f"anclora-purgedoc-batch-{batch_id}.zip",
+        media_type="application/zip"
+    )
 
 app.include_router(api_router)
