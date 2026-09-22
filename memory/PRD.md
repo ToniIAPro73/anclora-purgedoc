@@ -24,6 +24,9 @@ Design, implement, test and deliver end-to-end the production MVP of **Anclora P
 - **Physical Raster Pixel Obliteration**: Eliminates underlying bitmap pixels from the page image so data cannot be extracted even by raw pixel extraction.
 - **Post-Purge OCR Reverification**: Re-scans the redacted output PDF with Tesseract OCR to guarantee that sensitive strings are completely unrecoverable before certifying "Purga verificada".
 
+- **Multi-angle Deskew Normalizer**: OpenCV HoughLinesP and minAreaRect automated tilt detection and correction before local OCR. Preserves forward affine matrix $M$ and exact inverse matrix $M^{-1}$ for exact bounding box mapping.
+- **Fail-Closed Deskew Thresholds**: Minimum angle threshold (0.5°) to avoid unnecessary transformation of straight scans; confidence threshold (0.40) to prevent warping ambiguous or unskewable pages.
+
 - **P0**: End-to-end PDF & DOCX real redaction, automated verification, audit export (Completed).
 - **P1**: Local Tesseract OCR capability for scanned raster-only PDFs.
 - **P2**: Batch folder processing and custom organization ruleset editor.

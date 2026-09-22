@@ -17,11 +17,15 @@ class DocumentProcessor:
     def __init__(self):
         pass
 
-    def extract_pdf_content(self, pdf_path: str) -> Tuple[List[Dict[str, Any]], int, bool, bool]:
+    def extract_pdf_content(
+        self,
+        pdf_path: str,
+        apply_deskew: bool = True
+    ) -> Tuple[List[Dict[str, Any]], int, bool, bool]:
         """
         Extracts text, page dimensions and bounding boxes using PyMuPDF.
         If the PDF has no selectable text layer (scanned/raster), seamlessly
-        applies local Tesseract OCR to extract text and bounding boxes.
+        applies local Tesseract OCR with multi-angle deskew pre-pass.
         Returns:
             (pages_content, page_count, has_text_layer, is_scanned_ocr)
         """
@@ -30,17 +34,17 @@ class DocumentProcessor:
         pages_content = []
         total_text_len = 0
 
-        # Check if the document is scanned / raster-only
         is_scanned = local_ocr_engine.is_raster_only_pdf(doc)
 
         for p_idx in range(page_count):
             page = doc[p_idx]
             page_w = page.rect.width
             page_h = page.rect.height
+            deskew_info = {}
 
             if is_scanned:
-                logger.info(f"Page {p_idx + 1} has no text layer. Running local Tesseract OCR...")
-                p_text, rects = local_ocr_engine.ocr_page(page, p_idx + 1)
+                logger.info(f"Page {p_idx + 1} has no text layer. Running local Tesseract OCR with deskew...")
+                p_text, rects, deskew_info = local_ocr_engine.ocr_page(page, p_idx + 1, apply_deskew=apply_deskew)
                 total_text_len += len(p_text.strip())
             else:
                 p_text = page.get_text("text")
@@ -59,7 +63,8 @@ class DocumentProcessor:
                 "rects": rects,
                 "width": page_w,
                 "height": page_h,
-                "is_ocr": is_scanned
+                "is_ocr": is_scanned,
+                "deskew": deskew_info
             })
 
         doc.close()
@@ -67,7 +72,6 @@ class DocumentProcessor:
         return pages_content, page_count, has_text_layer, is_scanned
 
     def convert_docx_to_preview_pdf(self, docx_path: str, output_dir: str) -> str:
-        """Uses headless LibreOffice locally to generate a preview PDF for frontend viewing"""
         preview_pdf_path = os.path.join(output_dir, "preview.pdf")
         try:
             cmd = [
@@ -106,7 +110,6 @@ class DocumentProcessor:
         doc.close()
 
     def extract_docx_content(self, docx_path: str) -> Tuple[List[Dict[str, Any]], int, bool]:
-        """Extracts text from paragraphs, tables, headers, footers and core properties"""
         doc = docx.Document(docx_path)
         full_text = []
 
@@ -141,7 +144,6 @@ class DocumentProcessor:
         return pages_content, 1, has_text
 
     def render_pdf_page_image(self, pdf_path: str, page_num: int) -> bytes:
-        """Renders exact page as high-res PNG for pixel-perfect synchronized bounding boxes"""
         doc = fitz.open(pdf_path)
         p_idx = max(0, min(page_num - 1, len(doc) - 1))
         page = doc[p_idx]

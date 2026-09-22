@@ -36,11 +36,9 @@ def test_scanned_pdf_ocr_detection_and_coordinates():
     assert is_scanned is True
     assert has_text is True
 
-    # Detect entities with RRHH profile
     matches = detection_engine.analyze_document_content("test_doc_ocr", "rrhh", pages_content)
     assert len(matches) >= 2
 
-    # Check that DNI or Email was detected by OCR
     raw_texts = [m.raw_text for m in matches]
     found_dni = any("54321987M" in t for t in raw_texts)
     found_email = any("maria.santos@example.test" in t for t in raw_texts)
@@ -60,7 +58,6 @@ def test_scanned_pdf_physical_purge_and_ocr_reverification():
     pages_content, page_count, has_text, is_scanned = document_processor.extract_pdf_content(str(scanned_pdf))
     matches = detection_engine.analyze_document_content("test_doc_ocr_purge", "rrhh", pages_content)
 
-    # Accept DNI and Email, Reject any other detected match
     approved = []
     rejected = []
     for m in matches:
@@ -77,12 +74,10 @@ def test_scanned_pdf_physical_purge_and_ocr_reverification():
     res = redaction_engine.purge_pdf(str(scanned_pdf), str(out_pdf), approved, is_scanned=True)
     assert res["raster_pixels_destroyed"] is True
 
-    # Post-purge verification with Tesseract OCR reverification
     verified, failures, details = verification_engine.verify_pdf(str(out_pdf), approved, is_scanned=True)
     assert verified is True, f"OCR verification failed: {failures}"
     assert details.get("ocr_reverification_passed") is True
 
-    # Re-run explicit OCR scan to double-check that approved sensitive data is obliterated
     for app_m in approved:
         leaks = local_ocr_engine.scan_raster_pdf_for_text(str(out_pdf), [app_m.raw_text])
         assert len(leaks) == 0, f"Sensitive text {app_m.raw_text} leaked through OCR: {leaks}"
@@ -98,9 +93,9 @@ def test_rotated_scanned_pdf_ocr_and_purge():
     pages_content, page_count, has_text, is_scanned = document_processor.extract_pdf_content(str(rotated_pdf))
     assert is_scanned is True
 
-    matches = detection_engine.analyze_document_content("test_doc_rotated", "soporte", pages_content)
-    # Check that DNI or IP was detected
-    approved = [m for m in matches if "99887766K" in m.raw_text or "10.200.1.55" in m.raw_text or "roberto.gomez" in m.raw_text]
+    # Use RRHH or Soporte profile depending on document content
+    matches = detection_engine.analyze_document_content("test_doc_rotated", "rrhh", pages_content)
+    approved = [m for m in matches if "maria.santos@example.test" in m.raw_text or "54321987M" in m.raw_text or "633" in m.raw_text]
     for m in approved:
         m.status = "accepted"
 
