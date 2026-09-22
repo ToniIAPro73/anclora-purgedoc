@@ -31,7 +31,7 @@ regex_rules:
     description: "Número telefónico español"
   - id: "es_iban"
     entity_type: "IBAN"
-    pattern: "ES\\d{2}[ ]?\\d{4}[ ]?\\d{4}[ ]?\\d{2}[ ]?\\d{10}"
+    pattern: "ES\\d{2}(?:[ ]?\\d{4}){4}[ ]?\\d{2}|ES\\d{2}(?:[ ]?\\d{4}){5}"
     confidence: 0.99
     case_sensitive: false
     description: "IBAN cuenta bancaria española"

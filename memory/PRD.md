@@ -28,5 +28,7 @@ Design, implement, test and deliver end-to-end the production MVP of **Anclora P
 - **Fail-Closed Deskew Thresholds**: Minimum angle threshold (0.5°) to avoid unnecessary transformation of straight scans; confidence threshold (0.40) to prevent warping ambiguous or unskewable pages.
 
 - **P0**: End-to-end PDF & DOCX real redaction, automated verification, audit export (Completed).
+- **Security Hardening & Adversarial Verification Suite**: Added comprehensive adversarial testing in `backend/tests/security/` covering multi-engine PDF recovery (PyMuPDF, pypdf, pdfminer.six), raw byte stream analysis, raster image XObject extraction and pixel inspection, deep OOXML unzipping and XML part search, ephemeral session disk wiping, and zero-leakage log inspection.
+
 - **P1**: Local Tesseract OCR capability for scanned raster-only PDFs.
 - **P2**: Batch folder processing and custom organization ruleset editor.

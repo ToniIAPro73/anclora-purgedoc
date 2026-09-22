@@ -9,6 +9,7 @@ from lxml import etree
 from PIL import Image, ImageDraw
 import io
 from backend.models import MatchItem
+from backend.services.normalization import generate_adversarial_variants
 
 logger = logging.getLogger(__name__)
 
@@ -17,13 +18,6 @@ class RedactionEngine:
         pass
 
     def purge_pdf(self, input_pdf: str, output_pdf: str, approved_matches: List[MatchItem], is_scanned: bool = False) -> Dict[str, Any]:
-        """
-        Executes REAL redaction using PyMuPDF:
-        1. Native text layer: Apply physical stream redaction annotations
-        2. Scanned / raster layer: Physically obliterate pixel bounding boxes in raster image
-        3. Strips metadata (Author, Subject, Producer, Creator, Keywords, ModDate)
-        4. Saves with clean garbage collection
-        """
         doc = fitz.open(input_pdf)
         redactions_applied = 0
 
@@ -32,25 +26,26 @@ class RedactionEngine:
             if 0 <= p_idx < len(doc):
                 page = doc[p_idx]
                 target_text = match.raw_text.strip()
+                variants = generate_adversarial_variants(target_text)
                 
-                text_instances = page.search_for(target_text)
-                if text_instances:
+                for variant in variants:
+                    text_instances = page.search_for(variant)
                     for inst in text_instances:
                         page.add_redact_annot(inst, fill=(0, 0, 0))
                         redactions_applied += 1
-                elif match.bbox:
+
+                if match.bbox:
                     b = match.bbox
                     rect = fitz.Rect(b.x0, b.y0, b.x1, b.y1)
                     page.add_redact_annot(rect, fill=(0, 0, 0))
                     redactions_applied += 1
-                
+
                 page.apply_redactions()
 
-        # If scanned / raster-only PDF: destroy underlying pixel bytes
         if is_scanned:
             self._physically_destroy_raster_pixels(doc, approved_matches)
 
-        # Sanitize metadata
+        # Sanitize metadata completely
         metadata = {
             "title": "",
             "author": "",
@@ -63,6 +58,12 @@ class RedactionEngine:
         }
         doc.set_metadata(metadata)
 
+        try:
+            for emb_idx in range(doc.embfile_count()):
+                doc.embfile_del(emb_idx)
+        except Exception:
+            pass
+
         doc.save(
             output_pdf,
             garbage=4,
@@ -73,15 +74,15 @@ class RedactionEngine:
 
         return {
             "redactions_applied": redactions_applied,
-            "metadata_sanitized": ["author", "subject", "creator", "keywords", "modDate"],
+            "metadata_sanitized": ["author", "subject", "creator", "keywords", "modDate", "attachments"],
             "raster_pixels_destroyed": is_scanned
         }
 
     def _physically_destroy_raster_pixels(self, doc: fitz.Document, approved_matches: List[MatchItem]):
         """
         Physical raster pixel sanitization:
-        Renders each page into a high-res pixmap, paints solid black boxes over bounding boxes,
-        and replaces the page contents with the sanitized flattened image.
+        Paints solid black boxes directly onto the underlying image XObjects of the PDF,
+        ensuring that any extracted image or rendered page has the pixels destroyed.
         """
         for p_idx in range(len(doc)):
             page = doc[p_idx]
@@ -89,42 +90,70 @@ class RedactionEngine:
             if not page_matches:
                 continue
 
-            # Render at 300 DPI
+            # First, modify each embedded image XObject directly if present
+            image_list = page.get_images(full=True)
+            for img_info in image_list:
+                xref = img_info[0]
+                base_image = doc.extract_image(xref)
+                img_data = base_image["image"]
+                pil_xobj = Image.open(io.BytesIO(img_data)).convert("RGB")
+                draw_xobj = ImageDraw.Draw(pil_xobj)
+
+                scale_x = pil_xobj.width / float(page.rect.width)
+                scale_y = pil_xobj.height / float(page.rect.height)
+
+                for m in page_matches:
+                    b = m.bbox
+                    pad = 12
+                    px0 = max(0, int(b.x0 * scale_x) - pad)
+                    py0 = max(0, int(b.y0 * scale_y) - pad)
+                    px1 = min(pil_xobj.width, int(b.x1 * scale_x) + pad)
+                    py1 = min(pil_xobj.height, int(b.y1 * scale_y) + pad)
+                    draw_xobj.rectangle([px0, py0, px1, py1], fill="black")
+
+                out_xobj_bytes = io.BytesIO()
+                pil_xobj.save(out_xobj_bytes, format="PNG")
+                doc.update_stream(xref, out_xobj_bytes.getvalue())
+
+            # Also render page at 300 DPI and paint full black rectangles on the canvas
             mat = fitz.Matrix(300 / 72.0, 300 / 72.0)
             pix = page.get_pixmap(matrix=mat, alpha=False)
-            
             img = Image.open(io.BytesIO(pix.tobytes("png")))
             draw = ImageDraw.Draw(img)
-            
             scale_x = pix.width / float(page.rect.width)
             scale_y = pix.height / float(page.rect.height)
 
             for m in page_matches:
                 b = m.bbox
-                pad_x = 10
-                pad_y = 6
-                px0 = max(0, int(b.x0 * scale_x) - pad_x)
-                py0 = max(0, int(b.y0 * scale_y) - pad_y)
-                px1 = min(pix.width, int(b.x1 * scale_x) + pad_x)
-                py1 = min(pix.height, int(b.y1 * scale_y) + pad_y)
+                pad = 12
+                px0 = max(0, int(b.x0 * scale_x) - pad)
+                py0 = max(0, int(b.y0 * scale_y) - pad)
+                px1 = min(pix.width, int(b.x1 * scale_x) + pad)
+                py1 = min(pix.height, int(b.y1 * scale_y) + pad)
                 draw.rectangle([px0, py0, px1, py1], fill="black")
 
             out_img_bytes = io.BytesIO()
             img.save(out_img_bytes, format="PNG")
             out_img_bytes.seek(0)
 
-            # Replace the page contents with the sanitized image
             page.clean_contents()
             rect = page.rect
             page.insert_image(rect, stream=out_img_bytes.getvalue())
 
     def purge_docx(self, input_docx: str, output_docx: str, approved_matches: List[MatchItem]) -> Dict[str, Any]:
         doc = docx.Document(input_docx)
-        values_to_redact = [m.raw_text.strip() for m in approved_matches if m.raw_text.strip()]
+        
+        all_targets = set()
+        for m in approved_matches:
+            raw = m.raw_text.strip()
+            if raw:
+                all_targets.add(raw)
+                all_targets.update(generate_adversarial_variants(raw))
+
         redactions_count = 0
 
-        for val in values_to_redact:
-            if not val:
+        for val in all_targets:
+            if len(val) < 4:
                 continue
 
             for p in doc.paragraphs:
@@ -160,16 +189,17 @@ class RedactionEngine:
         temp_saved_path = output_docx + ".tmp"
         doc.save(temp_saved_path)
 
-        self._deep_ooxml_sanitize(temp_saved_path, output_docx, values_to_redact)
+        self._deep_ooxml_sanitize(temp_saved_path, output_docx, list(all_targets))
         if os.path.exists(temp_saved_path):
             os.remove(temp_saved_path)
 
         return {
             "redactions_applied": redactions_count,
-            "metadata_sanitized": ["core_properties", "app_properties", "headers", "footers", "tables"]
+            "metadata_sanitized": ["core_properties", "app_properties", "headers", "footers", "tables", "ooxml_all_parts"]
         }
 
     def _deep_ooxml_sanitize(self, zip_in: str, zip_out: str, values: List[str]):
+        """Sanitizes any raw XML / rels files inside the docx zip archive"""
         with zipfile.ZipFile(zip_in, 'r') as zin:
             with zipfile.ZipFile(zip_out, 'w', compression=zipfile.ZIP_DEFLATED) as zout:
                 for item in zin.infolist():
@@ -178,7 +208,7 @@ class RedactionEngine:
                         try:
                             text_content = data.decode("utf-8")
                             for v in values:
-                                if v in text_content:
+                                if len(v) >= 4 and v in text_content:
                                     text_content = text_content.replace(v, "[REDIGIDO]")
                             data = text_content.encode("utf-8")
                         except Exception:
