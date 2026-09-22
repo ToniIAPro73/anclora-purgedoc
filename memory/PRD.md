@@ -20,6 +20,10 @@ Design, implement, test and deliver end-to-end the production MVP of **Anclora P
 - **Frontend UI**: React 19 + Tailwind CSS with dark slate theme, bilingual support (ES/EN), interactive canvas with synchronized bounding box highlights, and QA fixture loader.
 
 ## 3. Prioritized Backlog
+- **Local Tesseract OCR Engine**: On-premise OCR with `tesseract-ocr` (spa+eng) and `pytesseract` to detect sensitive entities on scanned raster-only PDFs.
+- **Physical Raster Pixel Obliteration**: Eliminates underlying bitmap pixels from the page image so data cannot be extracted even by raw pixel extraction.
+- **Post-Purge OCR Reverification**: Re-scans the redacted output PDF with Tesseract OCR to guarantee that sensitive strings are completely unrecoverable before certifying "Purga verificada".
+
 - **P0**: End-to-end PDF & DOCX real redaction, automated verification, audit export (Completed).
 - **P1**: Local Tesseract OCR capability for scanned raster-only PDFs.
 - **P2**: Batch folder processing and custom organization ruleset editor.

@@ -12,13 +12,15 @@ const translations = {
     fixture_hr: "Nómina Salarial RRHH (PDF)",
     fixture_legal: "Contrato Mercantil & Poderes (DOCX)",
     fixture_support: "Informe Incidencia DevOps (PDF)",
+    fixture_scanned: "Informe Médico Escaneado (PDF Raster / OCR)",
+    fixture_rotated: "Certificado Rotado (PDF Escaneado / OCR)",
 
     // Upload screen
     upload_title: "Purga y anonimización de documentos",
     upload_subtitle: "Detección precisa mediante NER local y reglas verticales. Eliminación irreversible del contenido subyacente con verificación criptográfica.",
     dropzone_prompt: "Arrastra y suelta tu documento aquí, o",
     dropzone_browse: "explora tus archivos",
-    dropzone_formats: "Formatos admitidos: PDF nativo con capa de texto y DOCX (OOXML)",
+    dropzone_formats: "Formatos admitidos: PDF nativo o escaneado (OCR local) y DOCX (OOXML)",
     dropzone_max: "Tamaño máximo: 25 MB",
     dropzone_guarantee: "El documento se procesa en memoria local del servidor y nunca se comparte con servicios ni APIs de terceros.",
     selected_file: "Archivo seleccionado:",
@@ -105,13 +107,15 @@ const translations = {
     fixture_hr: "HR Payroll Receipt (PDF)",
     fixture_legal: "Commercial Contract & Powers (DOCX)",
     fixture_support: "DevOps Incident Report (PDF)",
+    fixture_scanned: "Scanned Medical Report (Raster PDF / OCR)",
+    fixture_rotated: "Rotated Certificate (Scanned PDF / OCR)",
 
     // Upload screen
     upload_title: "Document Redaction & Sanitization",
     upload_subtitle: "Precise detection via local NER and vertical profiles. Irreversible content purge with cryptographic verification.",
     dropzone_prompt: "Drag and drop your document here, or",
     dropzone_browse: "browse your files",
-    dropzone_formats: "Supported formats: Native PDF with selectable text & DOCX (OOXML)",
+    dropzone_formats: "Supported formats: Native or scanned PDF (local OCR) & DOCX (OOXML)",
     dropzone_max: "Maximum size: 25 MB",
     dropzone_guarantee: "The document is processed strictly in local server memory and never sent to external AI or third parties.",
     selected_file: "Selected file:",

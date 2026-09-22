@@ -26,9 +26,10 @@ def test_pdf_extraction_detection_purge_and_verification():
     hr_pdf = FIXTURES_DIR / "sample_rrhh_payroll.pdf"
     assert hr_pdf.exists()
     
-    pages_content, page_count, has_text = document_processor.extract_pdf_content(str(hr_pdf))
+    pages_content, page_count, has_text, is_scanned = document_processor.extract_pdf_content(str(hr_pdf))
     assert page_count >= 1
     assert has_text is True
+    assert is_scanned is False
 
     # 2. Detect with RRHH Profile
     doc_id = "test_doc_hr"
@@ -55,11 +56,11 @@ def test_pdf_extraction_detection_purge_and_verification():
 
     # 4. Redact PDF
     out_pdf = FIXTURES_DIR / "test_purged_hr.pdf"
-    redact_res = redaction_engine.purge_pdf(str(hr_pdf), str(out_pdf), approved)
+    redact_res = redaction_engine.purge_pdf(str(hr_pdf), str(out_pdf), approved, is_scanned=False)
     assert redact_res["redactions_applied"] >= 1
 
     # 5. Verify PDF: Must be completely absent from text layer and metadata
-    verified, failures, details = verification_engine.verify_pdf(str(out_pdf), approved)
+    verified, failures, details = verification_engine.verify_pdf(str(out_pdf), approved, is_scanned=False)
     assert verified is True, f"Verification failed with: {failures}"
     assert details["values_verified_absent"] >= len(approved)
 

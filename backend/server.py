@@ -172,7 +172,9 @@ async def load_synthetic_fixture(fixture_name: str, session_id: str, profile_id:
     mapping = {
         "rrhh": ("sample_rrhh_payroll.pdf", "rrhh", "application/pdf"),
         "legal": ("sample_legal_contract.docx", "legal", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
-        "soporte": ("sample_soporte_incident.pdf", "soporte", "application/pdf")
+        "soporte": ("sample_soporte_incident.pdf", "soporte", "application/pdf"),
+        "scanned": ("sample_scanned_medical_hr.pdf", "rrhh", "application/pdf"),
+        "rotated": ("sample_rotated_scanned.pdf", "soporte", "application/pdf")
     }
 
     if fixture_name not in mapping:
@@ -220,21 +222,23 @@ async def analyze_document(doc_id: str):
     doc_meta.status = "analyzing"
 
     if doc_meta.mime_type == "application/pdf":
-        pages_content, page_count, has_text = document_processor.extract_pdf_content(source_file)
+        pages_content, page_count, has_text, is_scanned = document_processor.extract_pdf_content(source_file)
         doc_meta.page_count = page_count
         doc_meta.has_text_layer = has_text
+        doc_meta.is_scanned_ocr = is_scanned
         paths["preview_pdf"] = source_file
     else: # DOCX
         pages_content, page_count, has_text = document_processor.extract_docx_content(source_file)
         doc_meta.page_count = page_count
         doc_meta.has_text_layer = has_text
+        doc_meta.is_scanned_ocr = False
         # Generate local headless PDF representation for visual review
         preview_pdf = document_processor.convert_docx_to_preview_pdf(source_file, session_dir)
         paths["preview_pdf"] = preview_pdf
 
     if not has_text:
         doc_meta.status = "error"
-        doc_meta.error_message = "El documento no contiene capa de texto seleccionable. Requiere OCR local (no soportado en esta versión)."
+        doc_meta.error_message = "El documento no contiene texto detectable incluso tras análisis OCR local."
         raise HTTPException(status_code=422, detail=doc_meta.error_message)
 
     # Run detection
@@ -339,9 +343,10 @@ async def purge_and_verify_document(doc_id: str):
 
     # 1. Real Redaction
     if ext == ".pdf":
-        redaction_res = redaction_engine.purge_pdf(source_file, purged_path, approved_matches)
+        is_scanned = getattr(doc_meta, "is_scanned_ocr", False)
+        redaction_res = redaction_engine.purge_pdf(source_file, purged_path, approved_matches, is_scanned=is_scanned)
         # 2. Automated Verification
-        passed, failures, v_details = verification_engine.verify_pdf(purged_path, approved_matches)
+        passed, failures, v_details = verification_engine.verify_pdf(purged_path, approved_matches, is_scanned=is_scanned)
     else: # DOCX
         redaction_res = redaction_engine.purge_docx(source_file, purged_path, approved_matches)
         # 2. Automated Verification

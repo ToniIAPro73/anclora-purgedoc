@@ -46,6 +46,7 @@ class DocumentMetadata(BaseModel):
     status: str = "uploaded"  # uploaded | analyzing | ready_for_review | purging | verified | verification_failed | error
     page_count: int = 1
     has_text_layer: bool = True
+    is_scanned_ocr: bool = False
     error_message: Optional[str] = None
     output_filename: Optional[str] = None
     output_sha256: Optional[str] = None

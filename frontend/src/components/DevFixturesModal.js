@@ -28,6 +28,20 @@ export const DevFixturesModal = ({ isOpen, onClose, onLoadFixture }) => {
       profile: "soporte",
       type: "PDF",
       desc: "Ticket técnico de incidente con dirección IP (198.51.100.45) y token de API (sk_live_...)."
+    },
+    {
+      id: "scanned",
+      name: t("fixture_scanned"),
+      profile: "rrhh",
+      type: "PDF Raster",
+      desc: "PDF escaneado sin capa de texto. Detecta PII mediante Tesseract OCR local y purga píxeles reales."
+    },
+    {
+      id: "rotated",
+      name: t("fixture_rotated"),
+      profile: "soporte",
+      type: "PDF Rotado",
+      desc: "Página escaneada con rotación a 90°. Detección OCR robusta y purga física de píxeles."
     }
   ];
 

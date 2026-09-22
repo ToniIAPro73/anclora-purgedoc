@@ -10,7 +10,6 @@ ner:
     - PERSON
     - LOC
     - GPE
-    - ORG
 regex_rules:
   - id: "es_dni_nie"
     entity_type: "DNI_NIE_NIF"

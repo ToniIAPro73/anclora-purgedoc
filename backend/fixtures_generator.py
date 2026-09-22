@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import fitz # PyMuPDF
 import docx
+from PIL import Image, ImageDraw, ImageFont
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -10,18 +11,18 @@ def generate_all_fixtures():
     generate_hr_pdf()
     generate_legal_docx()
     generate_support_pdf()
-    print("All synthetic fixtures generated successfully.")
+    generate_scanned_raster_pdf()
+    generate_rotated_scanned_pdf()
+    print("All synthetic fixtures (including scanned raster & rotated) generated successfully.")
 
 def generate_hr_pdf():
     pdf_path = FIXTURES_DIR / "sample_rrhh_payroll.pdf"
     doc = fitz.open()
     page = doc.new_page(width=595, height=842) # A4
     
-    # Title
     page.insert_text((50, 60), "RECIBO DE NÓMINA CONFIDENCIAL — DICIEMBRE 2025", fontsize=14, fontname="helv", color=(0.1, 0.2, 0.5))
     page.insert_text((50, 85), "EMPRESA: Soluciones Tecnológicas Ibéricas S.L.", fontsize=10, fontname="helv")
     
-    # Employee sensitive PII
     y = 120
     lines = [
         ("Nombre del Empleado:", "Laura Martínez Gómez"),
@@ -44,7 +45,6 @@ def generate_hr_pdf():
         
     page.insert_text((50, 480), "Documento de carácter estrictamente confidencial bajo normativa RGPD.", fontsize=9, fontname="helv", color=(0.4, 0.4, 0.4))
     
-    # Set metadata
     doc.set_metadata({
         "author": "Laura Martínez Gómez",
         "creator": "Payroll System v2",
@@ -59,12 +59,10 @@ def generate_legal_docx():
     docx_path = FIXTURES_DIR / "sample_legal_contract.docx"
     doc = docx.Document()
     
-    # Header
     section = doc.sections[0]
     header = section.header
     header.paragraphs[0].text = "ACUERDO DE CONFIDENCIALIDAD Y PRESTACIÓN DE SERVICIOS (REF: EXP-9982/2025)"
     
-    # Title
     h1 = doc.add_heading("CONTRATO DE ARRENDAMIENTO DE SERVICIOS", level=1)
     
     p1 = doc.add_paragraph("En Madrid, a 15 de enero de 2026. COMPARECEN:")
@@ -88,7 +86,6 @@ def generate_legal_docx():
         "a la cuenta bancaria ES99 1234 5678 9012 3456 7890."
     )
     
-    # Table with signatories
     table = doc.add_table(rows=1, cols=3)
     hdr_cells = table.rows[0].cells
     hdr_cells[0].text = "Representante"
@@ -105,7 +102,6 @@ def generate_legal_docx():
     row_cells2[1].text = "44556677C"
     row_cells2[2].text = "elena.ramos@example.test"
     
-    # Core props
     doc.core_properties.author = "Carlos Fernández Soto"
     doc.core_properties.comments = "Borrador de contrato confidencial"
     
@@ -147,6 +143,108 @@ def generate_support_pdf():
     
     doc.save(str(pdf_path))
     doc.close()
+    return str(pdf_path)
+
+def generate_scanned_raster_pdf():
+    """
+    Generates a purely raster, scanned-like PDF with NO text layer.
+    The page consists exclusively of a single bitmap image.
+    Contains sensitive PII (DNI, Email, IBAN, Phone).
+    """
+    pdf_path = FIXTURES_DIR / "sample_scanned_medical_hr.pdf"
+    
+    # 1. Draw synthetic scanned document onto a PIL bitmap image
+    width, height = 1240, 1754 # ~150 DPI A4
+    img = Image.new("RGB", (width, height), color="white")
+    draw = ImageDraw.Draw(img)
+
+    # Use default or basic system font
+    try:
+        font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
+        font_body = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26)
+    except Exception:
+        font_title = ImageFont.load_default()
+        font_body = ImageFont.load_default()
+
+    draw.text((100, 100), "INFORME MÉDICO DE APTITUD LABORAL — ESCANEADO", fill=(20, 20, 20), font=font_title)
+    draw.text((100, 160), "CENTRO MÉDICO LABORAL ANCLORA — DEPARTAMENTO DE RRHH", fill=(80, 80, 80), font=font_body)
+    draw.line([(100, 210), (1140, 210)], fill=(120, 120, 120), width=3)
+
+    items = [
+        ("Trabajador:", "María Dolores Santos Ruiz"),
+        ("DNI / NIE:", "54321987M"),
+        ("Email Contacto:", "maria.santos@example.test"),
+        ("Teléfono Móvil:", "+34 633 445 566"),
+        ("Cuenta Bancaria:", "ES12 3456 7890 1234 5678 9012"),
+        ("Aptitud Médica:", "APTO PARA EL PUESTO DE TRABAJO"),
+        ("Notas Confidenciales:", "Sin patologías previas de riesgo laboral.")
+    ]
+
+    y = 260
+    for label, val in items:
+        draw.text((100, y), label, fill=(50, 50, 50), font=font_body)
+        draw.text((450, y), val, fill=(0, 0, 0), font=font_body)
+        y += 65
+
+    # Save image to temporary path
+    img_tmp = FIXTURES_DIR / "tmp_scanned.png"
+    img.save(str(img_tmp), format="PNG")
+
+    # 2. Insert into PDF as an image only (ZERO text commands)
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_image(page.rect, filename=str(img_tmp))
+    
+    doc.set_metadata({
+        "author": "Servicio Médico",
+        "creator": "Scanner HP LaserJet M428",
+        "subject": "Scanned Document"
+    })
+
+    doc.save(str(pdf_path))
+    doc.close()
+
+    if img_tmp.exists():
+        img_tmp.unlink()
+    return str(pdf_path)
+
+def generate_rotated_scanned_pdf():
+    """
+    Generates a scanned raster PDF with 90 degrees rotation.
+    """
+    pdf_path = FIXTURES_DIR / "sample_rotated_scanned.pdf"
+    
+    width, height = 1240, 1754
+    img = Image.new("RGB", (width, height), color="white")
+    draw = ImageDraw.Draw(img)
+
+    try:
+        font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
+        font_body = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26)
+    except Exception:
+        font_title = ImageFont.load_default()
+        font_body = ImageFont.load_default()
+
+    draw.text((100, 100), "CERTIFICADO TÉCNICO ROTADO — ESCANEADO", fill=(20, 20, 20), font=font_title)
+    draw.text((100, 180), "Ingeniero Asignado: Roberto Gómez Castro", fill=(0, 0, 0), font=font_body)
+    draw.text((100, 260), "DNI: 99887766K", fill=(0, 0, 0), font=font_body)
+    draw.text((100, 340), "Email: roberto.gomez@example.test", fill=(0, 0, 0), font=font_body)
+    draw.text((100, 420), "IP Interna: 10.200.1.55", fill=(0, 0, 0), font=font_body)
+
+    img_tmp = FIXTURES_DIR / "tmp_rotated.png"
+    img.save(str(img_tmp), format="PNG")
+
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_image(page.rect, filename=str(img_tmp))
+    # Rotate page
+    page.set_rotation(90)
+
+    doc.save(str(pdf_path))
+    doc.close()
+
+    if img_tmp.exists():
+        img_tmp.unlink()
     return str(pdf_path)
 
 if __name__ == "__main__":
