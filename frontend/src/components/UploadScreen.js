@@ -155,6 +155,7 @@ export const UploadScreen = ({
           {customRulesCount > 0 && onOpenRulesEditor && (
             <button
               type="button"
+              data-testid="active_custom_rules_badge"
               onClick={onOpenRulesEditor}
               className="flex items-center gap-1.5 text-xs text-cyan-300 hover:text-cyan-200 bg-cyan-950/60 border border-cyan-800/80 px-2.5 py-1 rounded-full transition-colors"
             >

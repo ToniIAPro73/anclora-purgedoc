@@ -101,7 +101,8 @@ def generate_skewed_fixtures():
     _save_image_as_pdf(img_blank, FIXTURES_DIR / "sample_low_confidence_unskewable.pdf")
 
 def _save_image_as_pdf(img: Image.Image, out_path: Path, rotation: int = 0):
-    tmp_path = out_path.with_suffix(".tmp.png")
+    import os as _os, uuid as _uuid
+    tmp_path = out_path.with_suffix(f".tmp.{_os.getpid()}.{_uuid.uuid4().hex[:8]}.png")
     img.save(str(tmp_path), format="PNG")
     doc = fitz.open()
     page = doc.new_page(width=595, height=842)
