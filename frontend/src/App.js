@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 import { AppProvider, useApp } from "./context/AppContext";
 import { Header } from "./components/Header";
@@ -53,6 +53,7 @@ function PurgedocMainApp() {
       return [];
     }
   });
+  const initialCustomRulesRef = useRef(customRules);
 
   const activeCustomRulesCount = customRules.filter((r) => r.enabled).length;
 
@@ -67,7 +68,7 @@ function PurgedocMainApp() {
         // Also create an initial draft batch for seamless batch mode
         const bRes = await axios.post(`${BACKEND_URL}/api/sessions/${sId}/batches`, {
           default_profile_id: "rrhh",
-          custom_rules: customRules,
+          custom_rules: initialCustomRulesRef.current,
           ruleset_id: "batch_custom_ruleset",
           ruleset_version: "1.0.0"
         });
@@ -82,7 +83,7 @@ function PurgedocMainApp() {
   }, []);
 
   // Fetch / refresh batch details
-  const refreshBatch = async (targetBatchId = batchId) => {
+  const refreshBatch = useCallback(async (targetBatchId = batchId) => {
     if (!targetBatchId) return;
     try {
       const res = await axios.get(`${BACKEND_URL}/api/batches/${targetBatchId}`);
@@ -90,7 +91,7 @@ function PurgedocMainApp() {
     } catch (err) {
       console.error("Error refreshing batch:", err);
     }
-  };
+  }, [batchId]);
 
   // Toggle Single vs Batch Mode
   const handleToggleMode = () => {

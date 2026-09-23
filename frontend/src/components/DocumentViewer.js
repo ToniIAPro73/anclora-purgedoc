@@ -30,7 +30,7 @@ export const DocumentViewer = ({
         setCurrentPage(activeMatch.page);
       }
     }
-  }, [activeMatchId, matches]);
+  }, [activeMatchId, matches, currentPage]);
 
   const handlePrevPage = () => {
     setCurrentPage((prev) => Math.max(1, prev - 1));

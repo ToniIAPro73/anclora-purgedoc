@@ -27,7 +27,7 @@ export const RegexTestBench = ({
     if (exampleValue !== undefined && exampleValue !== testText) {
       setTestText(exampleValue);
     }
-  }, [exampleValue]);
+  }, [exampleValue, testText]);
 
   const handleTextChange = (e) => {
     const val = e.target.value;

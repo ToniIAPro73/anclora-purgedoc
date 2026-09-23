@@ -181,7 +181,7 @@ export const BatchQueueScreen = ({
         fallbackIntervalRef.current = null;
       }
     };
-  }, [batchId, backendUrl]);
+  }, [batchId, backendUrl, onRefreshBatch]);
 
   // Handle Drag & Drop / File Selection
   const handleFilesAdded = async (files) => {
