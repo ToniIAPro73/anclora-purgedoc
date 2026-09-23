@@ -17,8 +17,8 @@ DNS_STATUS=CONFIGURED_TLS_PENDING
 BACKEND_RUNTIME_EXTERNAL_REQUIRED=true
 NEON_RESOURCE_NAME=anclora-purgedoc-db
 NEON_RESOURCE_ID=store_YVnSjBw8FknekSJt
-DATABASE_RESOURCE=PROVISIONED_NOT_CONSUMED
-DATABASE_RUNTIME_SCOPE=none
+DATABASE_RESOURCE=PROVISIONED_AND_MIGRATED_METADATA_ONLY
+DATABASE_RUNTIME_SCOPE=metadata_only
 
 The Vercel project is frontend-only (`frontend/`). The FastAPI backend remains an
 external runtime because OCR, native document tooling, SSE, in-process sessions
@@ -47,9 +47,10 @@ FastAPI backend (backend/server.py, uvicorn, port 8001 by convention)
    └─ Ephemeral storage: local filesystem under TEMP_ROOT + in-process memory
 ```
 
-LOCAL_RUNTIME_MODEL=LOCAL_EPHEMERAL
-DATABASE_PROVIDER=NONE
-PERSISTENT_STORAGE=NONE
+LOCAL_RUNTIME_MODEL=PRODUCTION_BACKED_METADATA_ONLY
+DATABASE_PROVIDER=Neon PostgreSQL
+DATABASE_CONTENT_SCOPE=SANITIZED_METADATA_ONLY
+PERSISTENT_STORAGE=SANITIZED_METADATA_ONLY
 EXTERNAL_AI_OR_CLOUD_CALLS=NONE
 PRODUCTION_DEPLOYMENT_TARGET=NOT_DECLARED
 PRODUCTION_URL=NOT_DECLARED
@@ -58,14 +59,14 @@ CODING_AGENT_VENDOR_DEPENDENCY=NONE
 EMERGENT_RUNTIME_DEPENDENCY=NONE
 EXTERNAL_TELEMETRY=NONE
 
-There is no database: sessions, batches, custom rulesets, raw upload bytes and the SSE event
-bus live in process memory (`backend/server.py`, `backend/services/sessions.py`,
-`backend/services/event_bus.py`). State is lost on restart and is not shared across processes,
-so the backend is effectively single-instance. Because there is no database, the workspace
-`PRODUCTION_BACKED` model and governed migrations do not apply:
+Raw active sessions, batches, custom rulesets, upload bytes and the SSE event bus live in
+process memory (`backend/server.py`, `backend/services/sessions.py`,
+`backend/services/event_bus.py`). Only sanitized metadata is mirrored to PostgreSQL;
+raw state is lost on restart and is not shared across processes, so the backend remains
+effectively single-instance. Governed migrations apply only to the metadata schema:
 
 PRODUCTION_MIGRATIONS_ALLOWED=false
-MIGRATION_SYSTEM=NONE
+MIGRATION_SYSTEM=Alembic
 
 ## Toolchain
 

@@ -20,6 +20,7 @@ from backend.services.verification import verification_engine
 from backend.services.audit import audit_service
 from backend.services.rules import CustomRuleset, CustomRule
 from backend.services.event_bus import batch_event_bus
+from backend.db import metadata_store
 
 logger = logging.getLogger(__name__)
 from backend.services.csv_audit import generate_batch_audit_csv, generate_batch_audit_entities_csv
@@ -357,6 +358,8 @@ class BatchService:
                 audit_pdf_path = os.path.join(doc_dir, f"audit_{doc_id}.pdf")
                 audit_service.generate_audit_pdf(audit_json, audit_pdf_path)
                 paths["audit_pdf"] = audit_pdf_path
+                metadata_store.document_updated(doc_meta)
+                metadata_store.audit_completed(doc_meta, audit_json, all_matches)
 
                 # Publish final document outcome
                 if passed:

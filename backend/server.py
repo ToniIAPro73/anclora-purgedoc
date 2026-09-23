@@ -41,6 +41,7 @@ from backend.services.encrypted_rules import (
     preview_encrypted_ruleset,
     EncryptedRulesetError
 )
+from backend.db import metadata_store
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,9 @@ _DOC_CUSTOM_RULESETS: Dict[str, Dict[str, Any]] = {}
 
 # In-memory session byte cache to avoid permanent pod upload storage
 _SESSION_RAW_BYTES: Dict[str, bytes] = {}
+
+# Recover only sanitized lifecycle state. Raw active content remains ephemeral.
+metadata_store.startup_recover()
 
 def store_in_memory_session(doc_id: str, data: bytes):
     _SESSION_RAW_BYTES[doc_id] = data
@@ -154,6 +158,7 @@ async def create_session():
     session_id = str(uuid.uuid4())
     session_store.create_session(session_id)
     lifecycle_manager.register_session(session_id)
+    metadata_store.session_started(session_id, datetime.now(timezone.utc))
     return {"session_id": session_id, "status": "active"}
 
 @api_router.get("/sessions/{session_id}/expiry")
@@ -171,6 +176,7 @@ async def get_session_expiry(session_id: str):
 @api_router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str):
     await lifecycle_manager.delete_session_now(session_id, session_store, reason="manual_user_action")
+    metadata_store.tombstone("session", session_id, "manual_user_action")
     return {"status": "deleted", "session_id": session_id}
 
 @api_router.get("/profiles")
@@ -253,6 +259,7 @@ async def upload_document(
     )
 
     session_store.documents[doc_id] = doc_meta
+    metadata_store.document_created(doc_meta)
     session_store.doc_file_paths[doc_id] = {
         "source": dest_file,
         "preview_pdf": dest_file if ext == ".pdf" else None
@@ -298,6 +305,7 @@ async def load_synthetic_fixture(fixture_name: str, session_id: str, profile_id:
     )
 
     session_store.documents[doc_id] = doc_meta
+    metadata_store.document_created(doc_meta)
     session_store.doc_file_paths[doc_id] = {
         "source": dest_file,
         "preview_pdf": dest_file if dest_file.endswith(".pdf") else None
@@ -368,6 +376,7 @@ async def analyze_document(doc_id: str, payload: Optional[AnalyzeDocumentPayload
 
     session_store.matches[doc_id] = {m.id: m for m in matches}
     doc_meta.status = "ready_for_review"
+    metadata_store.document_updated(doc_meta)
 
     return {
         "document": doc_meta.model_dump(),
@@ -482,6 +491,8 @@ async def purge_and_verify_document(doc_id: str):
 
     audit_pdf_path = os.path.join(session_dir, f"audit_{doc_id}.pdf")
     audit_service.generate_audit_pdf(audit_json, audit_pdf_path)
+    metadata_store.document_updated(doc_meta)
+    metadata_store.audit_completed(doc_meta, audit_json, all_matches)
     paths["audit_pdf"] = audit_pdf_path
 
     return {
@@ -582,6 +593,7 @@ async def create_batch(session_id: str, payload: Optional[CreateBatchPayload] = 
     )
     session_store.batches[batch_id] = batch_meta
     session_store.get_batch_dir(session_id, batch_id)
+    metadata_store.batch_created(batch_meta)
 
     # Register ruleset overlay for batch
     batch_service.set_batch_ruleset(batch_id, custom_rules, ruleset_id=ruleset_id, version=ruleset_ver)
@@ -699,6 +711,7 @@ async def upload_documents_to_batch(
         )
 
         session_store.documents[doc_id] = doc_meta
+        metadata_store.document_created(doc_meta)
         session_store.doc_file_paths[doc_id] = {
             "source": dest_file,
             "preview_pdf": dest_file if ext == ".pdf" else None
@@ -707,6 +720,7 @@ async def upload_documents_to_batch(
         uploaded_docs.append(doc_meta.model_dump())
 
     batch.status = batch_service.compute_batch_status(batch)
+    metadata_store.batch_updated(batch)
     for d in uploaded_docs:
         await batch_event_bus.publish(
             batch_id=batch_id,
@@ -746,6 +760,7 @@ async def delete_batch_endpoint(batch_id: str):
         raise HTTPException(status_code=404, detail="Lote no encontrado.")
 
     await lifecycle_manager.delete_batch_now(batch_id, session_store, reason="manual_user_action")
+    metadata_store.tombstone("batch", batch_id, "manual_user_action")
     return {"status": "deleted", "batch_id": batch_id}
 async def remove_document_from_batch(batch_id: str, doc_id: str):
     batch = session_store.batches.get(batch_id)
@@ -761,7 +776,9 @@ async def remove_document_from_batch(batch_id: str, doc_id: str):
 
     batch.document_ids.remove(doc_id)
     session_store.cleanup_document(doc_id)
+    metadata_store.tombstone("document", doc_id, "removed_from_batch")
     batch.status = batch_service.compute_batch_status(batch)
+    metadata_store.batch_updated(batch)
 
     return {"status": "removed", "document_id": doc_id, "remaining": len(batch.document_ids)}
 
@@ -785,6 +802,7 @@ async def cancel_batch_document(batch_id: str, doc_id: str):
             pass
 
     doc.status = "cancelled"
+    metadata_store.document_updated(doc)
     batch.status = batch_service.compute_batch_status(batch)
     return {"status": "cancelled", "document_id": doc_id}
     await batch_event_bus.publish(
@@ -803,6 +821,7 @@ async def cancel_entire_batch(batch_id: str):
         raise HTTPException(status_code=404, detail="Lote no encontrado.")
 
     batch.status = "cancelled"
+    metadata_store.batch_updated(batch)
     for d_id in batch.document_ids:
         doc = session_store.documents.get(d_id)
         if doc and doc.status != "verified":
