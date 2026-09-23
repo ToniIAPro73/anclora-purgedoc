@@ -3,6 +3,31 @@
 PRODUCTION_RUNTIME_MANIFEST_VERSION=1.0
 STATUS=BOOTSTRAP_DECLARED
 
+## Deployment infrastructure
+
+VERCEL_PROJECT_NAME=anclora-purgedoc
+VERCEL_PROJECT_ID=prj_R4vPPL8ufnaqdGKBekjgmNiP5DrF
+VERCEL_ROOT_DIRECTORY=frontend
+VERCEL_FRAMEWORK=create-react-app
+VERCEL_PRODUCTION_BRANCH=main
+GITHUB_DEFAULT_BRANCH=development
+PRODUCTION_DOMAIN=purgedoc.anclora.com
+DNS_PROVIDER=Hostinger
+DNS_STATUS=PENDING_HOSTINGER_CREDENTIALS
+BACKEND_RUNTIME_EXTERNAL_REQUIRED=true
+NEON_RESOURCE_NAME=anclora-purgedoc-db
+NEON_RESOURCE_ID=store_YVnSjBw8FknekSJt
+DATABASE_RESOURCE=PROVISIONED_NOT_CONSUMED
+DATABASE_RUNTIME_SCOPE=none
+
+The Vercel project is frontend-only (`frontend/`). The FastAPI backend remains an
+external runtime because OCR, native document tooling, SSE, in-process sessions
+and ephemeral storage are not being adapted to Vercel Serverless. The Neon
+resource is connected to Vercel Production, Preview and Development and local
+environment values are configured, but the current PurgeDoc runtime does not
+consume PostgreSQL. No document, PII or session persistence is introduced.
+DNS remains authoritative at Hostinger.
+
 Every statement below was derived from the code at governance bootstrap time. Anything not
 defined in the repository is marked `NOT_DECLARED`; do not invent it.
 
