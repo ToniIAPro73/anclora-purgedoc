@@ -1,0 +1,54 @@
+{
+  "summary": "Full validation of Anclora Purgedoc Encrypted Profile Export/Import (.aprules) feature. BACKEND: 71/71 pytest cases pass in 54.25s (includes 9 tests in test_encrypted_ruleset.py: roundtrip canonical hash, zero-PII plaintext leak, unique salt/nonce per export, wrong password ENCRYPTED_RULESET_AUTH_FAILED, tampered ciphertext auth-fail, tampered AAD metadata auth-fail, anti-DoS KDF limits, unicode password support, built-in ruleset conflict protection). LIVE HTTP validation (new test_encrypted_ruleset_http.py, 5/5 pass in 3.15s): POST /api/rules/export-encrypted returns valid envelope (format='anclora-purgedoc-ruleset', format_version=1, cipher='AES-256-GCM', kdf='Argon2id', salt+nonce+ciphertext present); zero-PII verified on raw envelope JSON (no rule names, regex patterns, entity types, examples, or ruleset_name leak); preview with correct password returns rules_count+canonical_hash; wrong password → 401 ENCRYPTED_RULESET_AUTH_FAILED; bit-flipped ciphertext → 401; tampered AAD (time_cost=4) → 401. FRONTEND (E2E UI flow via Playwright on preview URL): open-rules-editor-btn opens editor, but a React runtime error 'Cannot read properties of undefined (reading example)' is thrown by <RegexTestBench> as soon as the rule edit panel renders — the component destructures `{ rule, backendUrl }` and reads `rule.example`, `rule.pattern`, `rule.case_sensitive`, but CustomRulesetEditor.js line 827-833 passes `pattern`, `caseSensitive`, `exampleValue`, `onSetExample` (no `rule` prop). This crashes the whole editor and blocks rule creation, encrypted export dialog, encrypted import dialog, preview, and commit at the UI layer. All backend endpoints and cryptographic contracts are 100% correct.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "RegexTestBench",
+        "issue": "Runtime crash: 'Cannot read properties of undefined (reading example)'. Component signature is `({ rule, backendUrl })` but parent CustomRulesetEditor (lines 827-833) passes `pattern`, `caseSensitive`, `exampleValue`, `onSetExample`. `rule` is therefore undefined and `rule.example` throws on mount, taking down the entire Ruleset Editor UI (blocks create/edit/export/import flows).",
+        "selector": "src/components/RegexTestBench.js:8 (useState(rule.example || ''))",
+        "priority": "CRITICAL"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Encrypted Export/Import E2E via UI",
+        "issue": "UI flow cannot be exercised end-to-end because RegexTestBench crash blocks the editor. Backend endpoints POST /api/rules/export-encrypted and POST /api/rules/preview-encrypted work correctly (verified via direct HTTP tests).",
+        "affected_selectors": ["open-rules-editor-btn", "create-rule-btn", "rule-name-input", "export-encrypted-rules-btn", "import-encrypted-rules-btn"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_encrypted_ruleset.py",
+    "/app/backend/tests/test_encrypted_ruleset_http.py",
+    "/app/test_reports/pytest/iteration_11_all.xml"
+  ],
+  "action_items": [
+    "Fix RegexTestBench prop mismatch: either (a) update RegexTestBench.js to accept `{ pattern, caseSensitive, exampleValue, onSetExample, backendUrl }` and use exampleValue as initial testText / onSetExample on change, and build `rule` object internally for POST /api/rules/test using pattern+caseSensitive+entity_type; OR (b) change parent (CustomRulesetEditor.js lines 827-833) to pass `rule={editingRule}` and `backendUrl={backendUrl}` only. Option (a) is preferred since parent already implements controlled state.",
+    "After fix, re-run UI E2E: create rule → export .aprules (verify AES-256-GCM/Argon2id envelope) → import → wrong password rejection → correct password preview → commit → verify rule active."
+  ],
+  "critical_code_review_comments": [
+    "CRITICAL: RegexTestBench.js:8 crashes on undefined `rule` prop — the two files (RegexTestBench.js and CustomRulesetEditor.js render site) were not refactored in sync. This is a smoke-test-level regression that would have been caught by mounting the create-rule form once.",
+    "encrypted_rules.py: Argon2id KDF param anti-DoS enforcement (memory_cost_kib upper bound, rejecting exorbitant values with UNSUPPORTED_CRYPTO_PARAMETERS before KDF execution) is well-designed and covered by test_anti_dos_kdf_limits_enforced.",
+    "encrypted_rules.py + AES-256-GCM AAD binding of envelope metadata (format, format_version, KDF params, salt, nonce) correctly propagates tamper-evidence — verified by test_tampered_aad_metadata_auth_failure and independent HTTP test_preview_tampered_aad_metadata_401.",
+    "Server maps EncryptedRulesetError.code ENCRYPTED_RULESET_AUTH_FAILED to HTTP 401 and other codes to 400 — good semantic separation; 500 is reserved for unexpected exceptions with generic message (no crypto internals leak).",
+    "Zero-PII envelope contract holds: rule names, regex patterns, descriptions, examples, entity_types, and even the user-supplied ruleset_name never appear in cleartext in the .aprules JSON — verified both in unit test and live HTTP test with raw JSON grep.",
+    "Every export produces unique salt+nonce+ciphertext for identical input (semantic security), confirmed by test_different_salt_and_nonce_per_export.",
+    "Built-in ruleset name collision (RRHH/Legal/Soporte) is rejected with BUILTIN_RULESET_CONFLICT during preview — prevents malicious import from overwriting immutable base rulesets.",
+    "Minor: RegexTestBench.js line 22 posts `rule: rule` to /api/rules/test — after the prop fix, ensure a synthetic rule object is constructed with entity_type + pattern + case_sensitive fields expected by that endpoint."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_encrypted_ruleset_http.py (new — 5 live HTTP tests for export/preview happy path, wrong-password 401, tampered ciphertext 401, tampered AAD 401, zero-PII envelope)"
+  ],
+  "success_rate": {
+    "backend": "100% (71/71 pytest + 5/5 live HTTP tests against preview URL)",
+    "frontend": "0% E2E UI blocked by RegexTestBench crash on editor open; export-encrypted-rules-btn / import-encrypted-rules-btn wiring itself is present in JSX with correct data-testids and event handlers, but unreachable in practice"
+  },
+  "test_credentials": "N/A (sovereign unauthenticated sessions)",
+  "seed_data_creation": "Envelope JSONs exported live during HTTP tests; not persisted (feature is stateless client-side download).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Regression: `cd /app && PYTHONPATH=/app python -m pytest backend/tests/ -v` → 71 pass ~55s (includes test_encrypted_ruleset.py). Live: `pytest backend/tests/test_encrypted_ruleset_http.py -v` → 5 pass. After main agent fixes RegexTestBench prop signature, re-run UI E2E: open-rules-editor-btn → create-rule-btn → fill rule-name-input/rule-entity-input/rule-pattern-input → save-custom-rule-btn → export-encrypted-rules-btn → export-password-input+export-confirm-password-input → confirm-export-encrypted-btn (expect file download of .aprules JSON, verify schema); import-encrypted-rules-btn → import-aprules-file-input (upload the .aprules) → import-password-input → decrypt-preview-btn → commit-import-rules-btn.",
+  "rca of the issue": "RCA: RegexTestBench.js:6 exports `({ rule, backendUrl })` and reads `rule.example` at :8, `rule.pattern` at :14, `rule.pattern` at :23. However CustomRulesetEditor.js:827-833 renders `<RegexTestBench backendUrl pattern caseSensitive exampleValue onSetExample />` — no `rule` prop is passed. Reproduction: open the app, click open-rules-editor-btn, either the editor auto-mounts an edit form or click create-rule-btn — React throws 'Cannot read properties of undefined (reading example)' at bundle.js:9686:88 caught by Emergent runtime error overlay. Mitigation (main agent): refactor RegexTestBench to accept the controlled props (pattern, caseSensitive, exampleValue, onSetExample, backendUrl) and construct the rule payload internally for POST /api/rules/test — OR revert parent to pass `rule={editingRule}` and lift onChange back into parent via a callback that updates editingRule.example. Backend crypto pipeline is fully verified and does not need changes."
+}
