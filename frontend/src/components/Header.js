@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import axios from "axios";
 import { useApp } from "../context/AppContext";
 import { ShieldCheck, Moon, Sun, Monitor, Globe, FileCode2, Check, Sliders } from "lucide-react";
 

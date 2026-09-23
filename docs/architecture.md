@@ -1,7 +1,7 @@
 # ANCLORA PURGEDOC — ARQUITECTURA TÉCNICA
 
 ## 1. Visión General
-**Anclora Purgedoc** es una plataforma de ingeniería documental para la purga y redacción física real, privada y verificada de datos sensibles en archivos PDF y DOCX, tanto en procesamiento individual como en cola de procesamiento por lotes (*Batch Document Queue*) con monitorización en tiempo real mediante *Batch Progress Streaming (SSE)* y exportación forense tabular en *CSV*.
+**Anclora Purgedoc** es una plataforma de ingeniería documental para la purga y redacción física real, privada y verificada de datos sensibles en archivos PDF y DOCX, tanto en procesamiento individual como en cola de procesamiento por lotes (*Batch Document Queue*) con monitorización en tiempo real mediante *Batch Progress Streaming (SSE)*, exportación forense tabular en *CSV* y gestión centralizada de ciclo de vida efímero (*Audit Retention Policies*).
 
 ```mermaid
 graph TD
@@ -28,13 +28,16 @@ graph TD
 
     E -.->|Eventos de Estado y Fases| EB[BatchEventBus In-Memory]
     EB -.->|GET /api/batches/{id}/events (SSE)| A
+
+    LM[LifecycleManager Centralizado] -.->|Inactividad TTL / Active Ops Guards| D
+    LM -.->|Limpieza en Cascada y Tombstones 410| EB
 ```
 
 ---
 
 ## 2. Límites y Fronteras de Privacidad
 1. **Zero External AI / Cloud**: Ningún dato, fragmento, imagen o metadato se transmite a LLMs remotos ni APIs externas. 100% de la computación es local (spaCy, Tesseract, OpenCV, PyMuPDF, python-docx).
-2. **Ciclo de vida efímero**: Los archivos se procesan en `/tmp/anclora-purgedoc/{session_id}/{batch_id}/{document_id}/` con TTL configurable y borrado explícito. No existe base de datos permanente de documentos ni de contenido sensible.
+2. **Ciclo de vida efímero gobernado por TTL**: Los archivos se procesan en `/tmp/anclora-purgedoc/{session_id}/{batch_id}/{document_id}/` con TTL de inactividad configurable y borrado explícito. No existe base de datos permanente de documentos ni de contenido sensible.
 3. **Auditoría Forense Criptográfica**: Las auditorías individuales y de lote nunca registran el texto sensible en texto plano, sino su hash SHA-256 (`sha256:...`).
 4. **Zero-PII en Streaming y Exportaciones Tabulares (CSV)**:
    - Los nombres de archivo se pseudonimizan como `document-001.pdf` en CSV para evitar filtraciones de PII a través de nombres personales.
@@ -42,47 +45,24 @@ graph TD
 
 ---
 
-## 3. Especificación de Exportación Tabular CSV
+## 3. Arquitectura del Ciclo de Vida y Retención (`services/lifecycle.py`)
 
-### 3.1 Esquemas Técnicos Estables (en inglés)
-1. **Resumen de Documentos (`batch-audit.csv`)**:
-   - `batch_id`
-   - `document_id`
-   - `source_filename` (pseudonimizado: `document-XXX.ext`)
-   - `input_type` (`PDF` / `DOCX`)
-   - `profile_id` (`rrhh`, `legal`, `soporte`)
-   - `profile_version`
-   - `ruleset_id`
-   - `ruleset_version`
-   - `ruleset_hash`
-   - `status` (`verified`, `verification_failed`, `error`, `cancelled`)
-   - `verification_status` (`verified`, `failed`, `unverified`)
-   - `detected_count`
-   - `accepted_count`
-   - `rejected_count`
-   - `pending_count`
-   - `applied_count`
-   - `source_sha256`
-   - `output_sha256`
-   - `started_at`
-   - `completed_at`
-   - `error_code`
+### 3.1 Política de Expiración Basada en Inactividad
+- `SESSION_TTL_MINUTES=60`: Expiración calculada como `last_activity_at + ttl_seconds`. Las acciones humanas (subida, revisión, navegación, purga, descarga) renuevan el timestamp. Los heartbeats técnicos de SSE **NO** renuevan el TTL.
+- Protección del estado `awaiting_review`: Los artefactos fuente e intermedios no se eliminan mientras la sesión esté activa y en espera de decisión humana.
+- Expiración dependiente de ciclo de vida: Los documentos fuente pasan a ser elegibles para eliminación (`eligible_for_cleanup_at`) únicamente después de que el documento haya generado exitosamente un output `verified` y sus auditorías asociadas.
 
-2. **Detalle por Entidad (`batch-audit-entities.csv`)**:
-   - `batch_id`
-   - `document_id`
-   - `source_filename`
-   - `entity_type`
-   - `detected_count`
-   - `accepted_count`
-   - `rejected_count`
+### 3.2 Protección de Operaciones Activas y Bloqueo de Concurrencia
+- Gestor de contexto `protect_operation(session_id, op_name)`: Incrementa un contador atómico `active_operations` bajo bloques `try/finally` para evitar carreras entre cleanup y operaciones en curso (OCR, purga, verificación, generación de ZIP o descargas).
+- Bloqueo de granularidad fina: `asyncio.Lock` independiente por sesión, lote y documento. Las operaciones batch no se bloquean entre lotes distintos.
 
-### 3.2 Estrategia Anti-Inyección de Fórmulas (CSV / Formula Injection)
-- Cualquier valor de celda que comience por `=`, `+`, `-`, `@`, `\t` o `\r` (incluso tras espacios en blanco iniciales) se neutraliza anteponiendo un apóstrofe `'`.
-- Formato estándar RFC 4180 con comillas mínimas (`csv.QUOTE_MINIMAL`), saltos de línea CRLF (`\r\n`) y codificación UTF-8 con BOM (`\ufeff`) para visualización instantánea y sin problemas de encoding en Microsoft Excel, LibreOffice y Google Sheets.
+### 3.3 Borrado Manual y Trazabilidad Tombstone
+- Borrado manual de lote: `DELETE /api/batches/{id}` elimina los archivos de ese lote exacto y limpia sus suscriptores en el event bus, dejando intactos los demás lotes de la sesión.
+- Borrado manual de sesión: `DELETE /api/sessions/{id}` ejecuta un borrado en cascada (lotes, documentos, temporales en disco, memoria y buses SSE).
+- Registro tombstone: El acceso a recursos eliminados o expirados responde con `HTTP 410 Gone` y `{ "code": "RESOURCE_EXPIRED", "detail": "RESOURCE_EXPIRED" }`.
 
 ---
 
-## 4. Limitaciones Conocidas y Deuda Técnica
-1. **Modularidad del Backend**: `server.py` agrupa endpoints individuales, de lote, de streaming y exportación CSV. Se recomienda separar en sub-módulos (`backend/routes/batch.py`, `backend/routes/documents.py`, `backend/routes/rules.py`).
-2. **Modularidad del Frontend**: `App.js` gestiona tanto el flujo individual como el selector de lote. Se recomienda extraer el contexto del lote en un hook dedicado si se amplían las funcionalidades.
+## 4. Limitaciones Conocidas y Alcance de Borrado
+1. **Alcance del Borrado**: La eliminación elimina los archivos y directorios gestionados por Anclora Purgedoc en `/tmp/`. No constituye un borrado físico seguro a nivel de hardware (SSD wear-leveling) ni tiene control sobre archivos que el usuario ya haya descargado a su dispositivo local.
+2. **Modularidad del Backend**: `server.py` agrupa endpoints de procesamiento, reglas, lotes, streaming y ciclo de vida. Se recomienda modularizar en routers dedicados (`routes/batch.py`, `routes/lifecycle.py`, etc.).
