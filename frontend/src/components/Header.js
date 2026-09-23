@@ -8,7 +8,9 @@ export const Header = ({
   onOpenRulesEditor,
   customRulesCount = 0,
   activeMode = "single",
-  onToggleMode
+  onToggleMode,
+  sessionId,
+  BACKEND_URL
 }) => {
   const { themeMode, setThemeMode, cycleTheme, lang, toggleLanguage, t } = useApp();
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
@@ -39,6 +41,36 @@ export const Header = ({
 
         {/* Right Controls: Custom Rules + Dev Fixtures + ES/EN Pill + Circular Theme Switcher */}
         <div className="flex items-center gap-3">
+          {/* Ephemeral Session TTL & Delete Session Now Button */}
+          {sessionId && (
+            <div className="flex items-center gap-2 mr-1">
+              <span
+                data-testid="session-ttl-indicator"
+                className="hidden md:inline text-[10px] font-mono px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-400"
+                title={t("session_ttl_badge")}
+              >
+                ⏱️ {t("session_ttl_badge")}
+              </span>
+              <button
+                type="button"
+                data-testid="delete-session-now-btn"
+                onClick={async () => {
+                  if (window.confirm("¿Eliminar todos los documentos, auditorías y sesiones de forma inmediata e irreversible?")) {
+                    try {
+                      await axios.delete(`${BACKEND_URL}/api/sessions/${sessionId}`);
+                      window.location.reload();
+                    } catch (e) {
+                      console.error("Failed to delete session:", e);
+                    }
+                  }
+                }}
+                className="px-2.5 py-1 text-xs rounded bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800/80 transition-colors"
+                title={t("session_delete_now_btn")}
+              >
+                {t("session_delete_now_btn")}
+              </button>
+            </div>
+          )}
           
           {/* Mode Switcher: Single vs Batch */}
           {onToggleMode && (

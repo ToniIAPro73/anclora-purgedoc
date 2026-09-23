@@ -35,6 +35,7 @@ from backend.services.batch import batch_service, get_batch_config
 from backend.services.csv_audit import generate_batch_audit_csv, generate_batch_audit_entities_csv
 from backend.fixtures_generator import FIXTURES_DIR, generate_all_fixtures
 from backend.services.event_bus import batch_event_bus
+from backend.services.lifecycle import lifecycle_manager, get_retention_config
 
 logger = logging.getLogger(__name__)
 
@@ -136,11 +137,24 @@ async def health_check():
 async def create_session():
     session_id = str(uuid.uuid4())
     session_store.create_session(session_id)
+    lifecycle_manager.register_session(session_id)
     return {"session_id": session_id, "status": "active"}
+
+@api_router.get("/sessions/{session_id}/expiry")
+async def get_session_expiry(session_id: str):
+    if lifecycle_manager.is_session_expired(session_id):
+        raise HTTPException(
+            status_code=410,
+            detail={"code": "RESOURCE_EXPIRED", "detail": "RESOURCE_EXPIRED"}
+        )
+    info = lifecycle_manager.get_session_expiry_info(session_id)
+    if not info:
+        raise HTTPException(status_code=404, detail="Sesión no encontrada.")
+    return info
 
 @api_router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str):
-    session_store.cleanup_session(session_id)
+    await lifecycle_manager.delete_session_now(session_id, session_store, reason="manual_user_action")
     return {"status": "deleted", "session_id": session_id}
 
 @api_router.get("/profiles")
@@ -669,7 +683,19 @@ async def update_batch_document_profile(batch_id: str, doc_id: str, payload: Upd
     doc.profile_id = payload.profile_id
     return doc.model_dump()
 
-@api_router.delete("/batches/{batch_id}/documents/{doc_id}")
+@api_router.delete("/batches/{batch_id}")
+async def delete_batch_endpoint(batch_id: str):
+    batch = session_store.batches.get(batch_id)
+    if not batch:
+        if lifecycle_manager.is_batch_expired(batch_id):
+            raise HTTPException(
+                status_code=410,
+                detail={"code": "RESOURCE_EXPIRED", "detail": "RESOURCE_EXPIRED"}
+            )
+        raise HTTPException(status_code=404, detail="Lote no encontrado.")
+
+    await lifecycle_manager.delete_batch_now(batch_id, session_store, reason="manual_user_action")
+    return {"status": "deleted", "batch_id": batch_id}
 async def remove_document_from_batch(batch_id: str, doc_id: str):
     batch = session_store.batches.get(batch_id)
     if not batch:

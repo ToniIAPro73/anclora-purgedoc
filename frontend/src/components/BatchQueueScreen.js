@@ -488,6 +488,27 @@ export const BatchQueueScreen = ({
               <Ban className="w-3.5 h-3.5" />
             </button>
           )}
+
+          {/* Delete Batch Now Button */}
+          <button
+            type="button"
+            data-testid="delete-batch-now-btn"
+            onClick={async () => {
+              if (window.confirm("¿Eliminar este lote y todos sus archivos asociados de forma inmediata?")) {
+                try {
+                  await axios.delete(`${backendUrl}/api/batches/${batchId}`);
+                  await onRefreshBatch();
+                } catch (e) {
+                  console.error("Error deleting batch:", e);
+                }
+              }
+            }}
+            className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 text-xs font-medium border border-slate-700 hover:border-rose-800 transition-colors flex items-center gap-1.5"
+            title={t("batch_delete_now_btn")}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{t("batch_delete_now_btn")}</span>
+          </button>
         </div>
       </div>
 

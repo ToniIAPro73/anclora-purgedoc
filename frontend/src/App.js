@@ -324,6 +324,8 @@ function PurgedocMainApp() {
         customRulesCount={activeCustomRulesCount}
         activeMode={activeMode}
         onToggleMode={handleToggleMode}
+        sessionId={sessionId}
+        BACKEND_URL={BACKEND_URL}
       />
 
       {/* Main Content Area */}
