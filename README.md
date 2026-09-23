@@ -17,25 +17,43 @@ Plataforma de purga documental real, privada y verificada para archivos PDF y DO
 
 ## Puesta en Marcha Local
 
-### Backend
+### Requisitos del sistema
+- Python 3.12 (mínimo 3.11), Node 20+ y Yarn 1.22.
+- Tesseract OCR con los idiomas `spa` y `eng` (macOS: `brew install tesseract tesseract-lang`; Debian/Ubuntu: `apt-get install tesseract-ocr tesseract-ocr-spa tesseract-ocr-eng`).
+- LibreOffice (`soffice`) es opcional: si no está, la vista previa DOCX usa un PDF generado con PyMuPDF.
+
+### Configuración
+Copia `backend/.env.example` y `frontend/.env.example` a `.env.local` (ficheros ignorados por Git, modo `0600`). El backend no carga `.env` por sí mismo: exporta las variables en la shell o deja los valores por defecto.
+
+### Backend (desde la raíz del repositorio)
 ```bash
-cd backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python -m spacy download es_core_news_sm
-python -m spacy download en_core_web_sm
-uvicorn server:app --host 0.0.0.0 --port 8001 --reload
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt   # incluye los modelos spaCy es/en
+PYTHONPATH=. uvicorn backend.server:app --host 127.0.0.1 --port 8001
 ```
 
 ### Frontend
 ```bash
 cd frontend
-yarn install
-yarn start
+yarn install --frozen-lockfile
+REACT_APP_BACKEND_URL=http://localhost:8001 yarn start
 ```
 
 ### Ejecución de Pruebas
 ```bash
-PYTHONPATH=. pytest backend/tests/test_redaction_pipeline.py -v
+# Suite determinista (backend/pytest.ini aplica -n 2 con pytest-xdist)
+PYTHONPATH=. python -c "from backend.fixtures_generator import generate_all_fixtures; generate_all_fixtures()"
+PYTHONPATH=. pytest backend/tests \
+  --ignore=backend/tests/test_api_e2e.py \
+  --ignore=backend/tests/test_encrypted_ruleset_http.py \
+  --ignore=backend/tests/security/test_sensitive_log_leakage.py
+
+# Pruebas HTTP: con el backend arrancado en local
+REACT_APP_BACKEND_URL=http://127.0.0.1:8001 PYTHONPATH=. pytest \
+  backend/tests/test_api_e2e.py backend/tests/test_encrypted_ruleset_http.py \
+  backend/tests/security/test_sensitive_log_leakage.py
+
+# Frontend
+cd frontend && CI=true yarn test --watchAll=false --passWithNoTests && yarn build
 ```

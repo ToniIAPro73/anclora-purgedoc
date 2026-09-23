@@ -1,10 +1,11 @@
-"""Live HTTP tests for encrypted ruleset export/preview endpoints via public preview URL."""
+"""Live HTTP tests for encrypted ruleset export/preview endpoints against a running backend."""
 import os
 import json
 import base64
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://audit-redact.preview.emergentagent.com").rstrip("/")
+# Explicit REACT_APP_BACKEND_URL, otherwise the local backend. Never a remote fallback.
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "http://127.0.0.1:8001").rstrip("/")
 
 SAMPLE_RULESET = {
     "ruleset_id": "http_test_alpha",

@@ -21,7 +21,7 @@ Design, implement, test, and deliver end-to-end the production MVP of **Anclora 
 ## 2. Architecture & Accomplished Features
 
 ### 2.1 Vertical Profiles & Hybrid Local Detection
-- YAML rulesets in `/app/backend/config/profiles/` (`rrhh.yaml`, `legal.yaml`, `soporte.yaml`).
+- YAML rulesets in `backend/config/profiles/` (`rrhh.yaml`, `legal.yaml`, `soporte.yaml`).
 - Detection Pipeline: Merges spaCy local NER (PERSON, ORG, LOC) with vertical regex rules (DNI, CIF, IBAN, NSS, IP, API Tokens, Case IDs).
 - Deduplication & Overlap Resolution: Prioritizes custom rules and high-confidence regex rules over lower-confidence NER predictions.
 
@@ -105,7 +105,7 @@ Design, implement, test, and deliver end-to-end the production MVP of **Anclora 
   - `backend/tests/test_custom_rules.py` (8 tests)
   - `backend/tests/security/` (7 security hardening and adversarial recovery suites)
   - `backend/tests/test_api_e2e.py`, `test_deskew_pipeline.py`, `test_ocr_pipeline.py`, `test_redaction_pipeline.py`
-- **Frontend E2E**: 100% PASS verified via `testing_agent_v3` (Iteration 12 report `/app/test_reports/iteration_12.json`).
+- **Frontend E2E**: 100% PASS verified via `testing_agent_v3` (Iteration 12 report `test_reports/iteration_12.json`). Historical record from the original Emergent environment; not a current testing instruction.
   - Open Custom Ruleset Editor cleanly with mounted RegexTestBench.
   - Create and save custom rule (`TEST_APRULE_FISCAL`).
   - Export encrypted `.aprules` file with password and verify zero plaintext leaks in downloaded JSON.

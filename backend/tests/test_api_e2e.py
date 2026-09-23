@@ -1,21 +1,12 @@
-"""End-to-end HTTP tests hitting the public backend URL."""
+"""End-to-end HTTP tests against a running backend (local by default)."""
 import os
 import io
 import time
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://audit-redact.preview.emergentagent.com").rstrip("/")
-
-# Load public URL from frontend/.env if env not set
-if not os.environ.get("REACT_APP_BACKEND_URL"):
-    try:
-        with open("/app/frontend/.env") as f:
-            for line in f:
-                if line.startswith("REACT_APP_BACKEND_URL="):
-                    BASE_URL = line.split("=", 1)[1].strip().rstrip("/")
-    except Exception:
-        pass
+# Explicit REACT_APP_BACKEND_URL, otherwise the local backend. Never a remote fallback.
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "http://127.0.0.1:8001").rstrip("/")
 
 
 @pytest.fixture(scope="module")

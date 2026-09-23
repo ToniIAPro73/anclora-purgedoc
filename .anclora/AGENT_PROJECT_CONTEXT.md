@@ -24,8 +24,9 @@ Resolve instructions in this order:
 7. Task-specific documentation and tests.
 
 If an expected contract is missing, report `ANCLORA_CONTRACT_GAP`; do not invent its rules.
-Historical Emergent artifacts (`.emergent/`, `test_reports/`, `test_result.md`, `memory/`
-agent notes) are non-normative context, never runtime authority.
+No coding-agent vendor is required for runtime, build, CI or development. Purgedoc was
+originally generated on Emergent; Emergent is not a dependency of Purgedoc. Historical records
+(`test_reports/`, `memory/` notes, Git history) are non-normative context, never authority.
 
 ## Sources of truth
 
@@ -76,6 +77,8 @@ AUTO_PROMOTE=false
 - Never expose, commit or upload processed or user-supplied documents; tests use synthetic fixtures only.
 - Preserve the privacy-first model: 100 % local processing, no remote LLM, OCR or cloud API.
   Do not introduce cloud dependencies that contradict it without Toni's authorization.
+- No external analytics, telemetry or session recording, and no third-party scripts that could
+  observe document content. Do not reintroduce vendor/platform SDKs (e.g. Emergent) into the app.
 - Never weaken fail-closed verification: residual sensitive data must block certification.
 - Audit artifacts never contain sensitive text in clear (SHA-256 hashes only).
 - Never delete, skip or relax security tests (`backend/tests/security/`) to get a green build.
@@ -83,7 +86,6 @@ AUTO_PROMOTE=false
 
 ## Known gaps (not resolved by the governance bootstrap)
 
-- Emergent legacy dependencies remain in manifests (see `.anclora/AOS_ADOPTION.md`).
 - No frontend unit tests exist; the frontend CI gate is install + `--passWithNoTests` + build.
 - Four `react-hooks/exhaustive-deps` warnings exist; CI builds with `CI=false` so the configured
   `warn` severity is honored instead of CRA promoting warnings to errors.

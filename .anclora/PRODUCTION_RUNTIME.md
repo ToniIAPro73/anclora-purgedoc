@@ -28,12 +28,15 @@ PERSISTENT_STORAGE=NONE
 EXTERNAL_AI_OR_CLOUD_CALLS=NONE
 PRODUCTION_DEPLOYMENT_TARGET=NOT_DECLARED
 PRODUCTION_URL=NOT_DECLARED
+RUNTIME_VENDOR_DEPENDENCY=NONE
+CODING_AGENT_VENDOR_DEPENDENCY=NONE
+EMERGENT_RUNTIME_DEPENDENCY=NONE
+EXTERNAL_TELEMETRY=NONE
 
 There is no database: sessions, batches, custom rulesets, raw upload bytes and the SSE event
 bus live in process memory (`backend/server.py`, `backend/services/sessions.py`,
 `backend/services/event_bus.py`). State is lost on restart and is not shared across processes,
-so the backend is effectively single-instance. `MONGO_URL`/`DB_NAME` in `backend/.env.example`
-are Emergent leftovers that no code reads. Because there is no database, the workspace
+so the backend is effectively single-instance. Because there is no database, the workspace
 `PRODUCTION_BACKED` model and governed migrations do not apply:
 
 PRODUCTION_MIGRATIONS_ALLOWED=false
@@ -59,7 +62,7 @@ Native/system dependencies:
 ```bash
 # backend (from repo root)
 python3.12 -m venv backend/venv && source backend/venv/bin/activate
-pip install -r backend/requirements.txt   # see Emergent note below
+pip install -r backend/requirements.txt   # public PyPI/GitHub sources only
 PYTHONPATH=. uvicorn backend.server:app --host 127.0.0.1 --port 8001
 
 # frontend
@@ -70,9 +73,13 @@ The backend does not load `.env` files itself; variables must be exported in the
 environment. On boot `generate_all_fixtures()` (re)writes synthetic fixtures in
 `backend/fixtures/` (gitignored).
 
-Emergent note: `emergentintegrations` is not published on PyPI and `litellm` is pinned to an
-Emergent-hosted wheel. Neither is imported. Until they are removed from the manifest, install
-with those two lines filtered out, exactly as CI does.
+All Python dependencies resolve from public PyPI, plus the spaCy model wheels pinned to
+`github.com/explosion/spacy-models` releases. Frontend dependencies resolve from the public npm
+registry through `frontend/yarn.lock`. No private package index is required.
+
+The only remote resource the UI loads is the Inter webfont from Google Fonts
+(`frontend/public/index.html`); the app still works without it. There is no analytics or
+telemetry, and no document data leaves the backend.
 
 ## Environment contract
 
@@ -96,8 +103,8 @@ Backend (read by code, defaults in parentheses):
 | `SSE_HISTORY_TTL_MINUTES` (30) | `lifecycle.py` | SSE history TTL |
 | `CLEANUP_INTERVAL_SECONDS` (60) | `lifecycle.py` | Cleanup tick interval |
 
-Frontend: `REACT_APP_BACKEND_URL` (required), `ENABLE_HEALTH_CHECK` and
-`DISABLE_EMERGENT_OVERLAY` (dev server only, `craco.config.js`).
+Frontend: `REACT_APP_BACKEND_URL` (required) and `ENABLE_HEALTH_CHECK` (dev server only,
+`craco.config.js`).
 
 Tests: `REACT_APP_BACKEND_URL` selects the backend for HTTP tests; `TESSDATA_PREFIX` may point
 Tesseract to language data.
@@ -144,8 +151,7 @@ REAL_DOCUMENTS_IN_TESTS=false
 - Deterministic in-process suite: all of `backend/tests/` except the three HTTP tests.
 - HTTP tests (`test_api_e2e.py`, `test_encrypted_ruleset_http.py`,
   `security/test_sensitive_log_leakage.py`) need a running backend and
-  `REACT_APP_BACKEND_URL=http://127.0.0.1:8001`. Never let them fall back to the legacy
-  Emergent preview URL.
+  `REACT_APP_BACKEND_URL` (default `http://127.0.0.1:8001`). They never fall back to a remote host.
 - Frontend has no unit tests; `yarn test --watchAll=false --passWithNoTests` + `yarn build`.
 
 ## Git delivery
