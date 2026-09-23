@@ -1,0 +1,105 @@
+name: Promote / Environment
+
+# Manual, human-gated promotion. Moves the target branch to the exact SHA already
+# validated upstream. Fast-forward only: no merge, rebase, cherry-pick, new commit
+# or force push.
+#
+# development -> staging -> production -> main
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Branch to promote into"
+        required: true
+        type: choice
+        options: [staging, production, main]
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: promote-${{ inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Promote to ${{ inputs.target }}
+    runs-on: ubuntu-latest
+    env:
+      TARGET: ${{ inputs.target }}
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve source branch
+        id: source
+        run: |
+          set -euo pipefail
+          case "$TARGET" in
+            staging) SOURCE=development ;;
+            production) SOURCE=staging ;;
+            main) SOURCE=production ;;
+            *) echo "::error::Unsupported target: $TARGET"; exit 1 ;;
+          esac
+          echo "Promotion: $SOURCE -> $TARGET"
+          echo "branch=$SOURCE" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve SHAs and verify fast-forward safety
+        id: check
+        env:
+          SOURCE: ${{ steps.source.outputs.branch }}
+        run: |
+          set -euo pipefail
+          git fetch origin "+refs/heads/$SOURCE:refs/remotes/origin/$SOURCE" "+refs/heads/$TARGET:refs/remotes/origin/$TARGET"
+          SOURCE_SHA="$(git rev-parse "origin/$SOURCE")"
+          TARGET_SHA="$(git rev-parse "origin/$TARGET")"
+          echo "Source ($SOURCE): $SOURCE_SHA"
+          echo "Target ($TARGET): $TARGET_SHA"
+          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          echo "target_sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
+          if [ "$SOURCE_SHA" = "$TARGET_SHA" ]; then
+            echo "Target already at source SHA. Nothing to promote."
+            echo "noop=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! git merge-base --is-ancestor "$TARGET_SHA" "$SOURCE_SHA"; then
+            echo "::error::PROMOTION_BLOCKED_DIVERGENCE: $TARGET contains commits not present in $SOURCE."
+            exit 1
+          fi
+          echo "noop=false" >> "$GITHUB_OUTPUT"
+
+      - name: Verify successful CI for exact source SHA
+        if: steps.check.outputs.noop == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.check.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          RUNS_JSON="$(gh api "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=$SOURCE_SHA&per_page=100")"
+          SUCCESSFUL_RUNS="$(printf '%s' "$RUNS_JSON" | jq --arg sha "$SOURCE_SHA" '[.workflow_runs[] | select(.name == "CI / Development" and .head_sha == $sha and .status == "completed" and .conclusion == "success")] | length')"
+          echo "Successful CI / Development runs for $SOURCE_SHA: $SUCCESSFUL_RUNS"
+          if [ "$SUCCESSFUL_RUNS" -lt 1 ]; then
+            echo "::error::PROMOTION_BLOCKED_CI_NOT_GREEN: no completed successful CI / Development run exists for the exact source SHA."
+            exit 1
+          fi
+
+      # Plain (non-forced) push of an existing SHA: the server rejects anything that is not a
+      # fast-forward, and no new commit is created.
+      - name: Fast-forward target ref
+        if: steps.check.outputs.noop == 'false'
+        env:
+          SOURCE_SHA: ${{ steps.check.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          git push origin "$SOURCE_SHA:refs/heads/$TARGET"
+          git fetch origin "+refs/heads/$TARGET:refs/remotes/origin/$TARGET"
+          PROMOTED_SHA="$(git rev-parse "origin/$TARGET")"
+          if [ "$PROMOTED_SHA" != "$SOURCE_SHA" ]; then
+            echo "::error::Post-promotion check failed: $TARGET is at $PROMOTED_SHA, expected $SOURCE_SHA."
+            exit 1
+          fi
+          echo "$TARGET promoted to $SOURCE_SHA"
