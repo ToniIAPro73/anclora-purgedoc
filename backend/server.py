@@ -165,8 +165,9 @@ class PreviewEncryptedRulesetPayload(BaseModel):
 
 @api_router.get("/health")
 async def health_check():
+    database_configured = metadata_store.enabled
     checks = {
-        "database": False,
+        "database": False if database_configured else "not_configured",
         "temp_root": False,
         "tesseract": False,
         "spa": "es" in detection_engine.nlp_models,
@@ -189,7 +190,10 @@ async def health_check():
         checks["tesseract"] = "spa" in languages and "eng" in languages
     except Exception:
         logger.exception("PurgeDoc Tesseract readiness check failed")
-    if not all(checks.values()):
+    required_checks = [checks["temp_root"], checks["tesseract"], checks["spa"], checks["eng"]]
+    if database_configured:
+        required_checks.append(checks["database"])
+    if not all(required_checks):
         from fastapi import HTTPException
         raise HTTPException(status_code=503, detail={"status": "not_ready", "checks": checks})
     return {
