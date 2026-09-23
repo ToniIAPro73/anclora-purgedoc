@@ -36,6 +36,11 @@ from backend.services.csv_audit import generate_batch_audit_csv, generate_batch_
 from backend.fixtures_generator import FIXTURES_DIR, generate_all_fixtures
 from backend.services.event_bus import batch_event_bus
 from backend.services.lifecycle import lifecycle_manager, get_retention_config
+from backend.services.encrypted_rules import (
+    export_encrypted_ruleset,
+    preview_encrypted_ruleset,
+    EncryptedRulesetError
+)
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +123,17 @@ class StartBatchAnalysisPayload(BaseModel):
 
 class StartBatchPurgePayload(BaseModel):
     document_ids: Optional[List[str]] = None
+
+class ExportEncryptedRulesetPayload(BaseModel):
+    ruleset: CustomRuleset
+    password: str
+    ruleset_name: Optional[str] = None
+    description: Optional[str] = None
+
+class PreviewEncryptedRulesetPayload(BaseModel):
+    envelope: Dict[str, Any]
+    password: str
+    current_rules: Optional[List[CustomRule]] = None
 
 # ----------------- Routes -----------------
 
@@ -505,6 +521,41 @@ async def download_audit_pdf(doc_id: str):
         raise HTTPException(status_code=404, detail="Certificado de auditoría PDF no disponible.")
     return FileResponse(pdf_path, filename=f"audit_{doc_id}.pdf", media_type="application/pdf")
 
+
+
+# ----------------- Encrypted Ruleset (.aprules) Endpoints -----------------
+
+@api_router.post("/rules/export-encrypted")
+async def export_encrypted_ruleset_endpoint(payload: ExportEncryptedRulesetPayload):
+    try:
+        envelope = export_encrypted_ruleset(
+            ruleset=payload.ruleset,
+            password=payload.password,
+            ruleset_name=payload.ruleset_name,
+            description=payload.description
+        )
+        return envelope
+    except EncryptedRulesetError as e:
+        raise HTTPException(status_code=400, detail={"code": e.code, "detail": e.detail})
+    except Exception as e:
+        logger.exception("Export encrypted ruleset error")
+        raise HTTPException(status_code=500, detail={"code": "INTERNAL_CRYPTO_ERROR", "detail": "Error interno al cifrar ruleset."})
+
+@api_router.post("/rules/preview-encrypted")
+async def preview_encrypted_ruleset_endpoint(payload: PreviewEncryptedRulesetPayload):
+    try:
+        preview_data = preview_encrypted_ruleset(
+            envelope=payload.envelope,
+            password=payload.password,
+            current_rules=payload.current_rules
+        )
+        return preview_data
+    except EncryptedRulesetError as e:
+        status_code = 401 if e.code == "ENCRYPTED_RULESET_AUTH_FAILED" else 400
+        raise HTTPException(status_code=status_code, detail={"code": e.code, "detail": e.detail})
+    except Exception as e:
+        logger.exception("Preview encrypted ruleset error")
+        raise HTTPException(status_code=500, detail={"code": "INTERNAL_CRYPTO_ERROR", "detail": "Error interno al descifrar ruleset."})
 
 # ----------------- Batch Processing Endpoints -----------------
 

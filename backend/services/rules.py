@@ -202,3 +202,6 @@ class RegexValidator:
         )
 
 regex_validator = RegexValidator()
+def validate_rule_pattern(pattern: str, case_sensitive: bool = False):
+    return RegexValidator.validate_pattern(pattern, case_sensitive)
+
