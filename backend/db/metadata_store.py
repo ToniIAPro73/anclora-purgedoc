@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import create_engine, update
+from sqlalchemy import create_engine, text, update
 from sqlalchemy.orm import sessionmaker
 
 from .models import AuditItemRow, AuditRecordRow, BatchRow, DocumentRow, LifecycleTombstoneRow, SessionRow
@@ -26,6 +26,13 @@ class MetadataStore:
         with self.Session() as db:
             db.execute(update(SessionRow).where(SessionRow.status.in_(["active", "processing"])).values(status="interrupted"))
             db.commit()
+
+    def health_check(self) -> bool:
+        if not self.enabled:
+            return False
+        with self.engine.connect() as db:
+            db.execute(text("SELECT 1"))
+        return True
 
     def _commit(self, operation):
         if not self.enabled:

@@ -7,12 +7,15 @@ import json
 import uuid
 import shutil
 import logging
+import tempfile
+from contextlib import asynccontextmanager
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 from fastapi import FastAPI, APIRouter, UploadFile, File, Form, HTTPException, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+import pytesseract
 
 # Ensure /app is in sys.path
 APP_DIR = Path(__file__).resolve().parent.parent
@@ -20,7 +23,7 @@ if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
 from backend.models import DocumentMetadata, MatchItem, calculate_file_sha256
-from backend.services.sessions import session_store
+from backend.services.sessions import session_store, TEMP_ROOT
 from backend.services.detection import detection_engine
 from backend.services.documents import document_processor
 from backend.services.redaction import redaction_engine
@@ -45,10 +48,29 @@ from backend.db import metadata_store
 
 logger = logging.getLogger(__name__)
 
+async def _cleanup_loop(stop_event: asyncio.Event):
+    interval = max(get_retention_config()["cleanup_interval_seconds"], 1)
+    while True:
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=interval)
+            return
+        except asyncio.TimeoutError:
+            await lifecycle_manager.run_periodic_cleanup_tick(session_store)
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    stop_event = asyncio.Event()
+    cleanup_task = asyncio.create_task(_cleanup_loop(stop_event))
+    try:
+        yield
+    finally:
+        stop_event.set()
+        await cleanup_task
+
 # Ensure synthetic test fixtures exist on boot
 generate_all_fixtures()
 
-app = FastAPI(title="Anclora Purgedoc API", version="1.0.0")
+app = FastAPI(title="Anclora Purgedoc API", version="1.0.0", lifespan=lifespan)
 api_router = APIRouter(prefix="/api")
 
 # CORS Setup
@@ -143,10 +165,38 @@ class PreviewEncryptedRulesetPayload(BaseModel):
 
 @api_router.get("/health")
 async def health_check():
+    checks = {
+        "database": False,
+        "temp_root": False,
+        "tesseract": False,
+        "spa": "es" in detection_engine.nlp_models,
+        "eng": "en" in detection_engine.nlp_models,
+    }
+    try:
+        checks["database"] = metadata_store.health_check()
+    except Exception:
+        logger.exception("PurgeDoc metadata health check failed")
+    try:
+        os.makedirs(TEMP_ROOT, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=TEMP_ROOT, prefix=".readiness-", delete=True):
+            pass
+        checks["temp_root"] = True
+    except Exception:
+        logger.exception("PurgeDoc TEMP_ROOT readiness check failed")
+    try:
+        pytesseract.get_tesseract_version()
+        languages = set(pytesseract.get_languages(config=""))
+        checks["tesseract"] = "spa" in languages and "eng" in languages
+    except Exception:
+        logger.exception("PurgeDoc Tesseract readiness check failed")
+    if not all(checks.values()):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=503, detail={"status": "not_ready", "checks": checks})
     return {
         "status": "healthy",
         "product": "Anclora Purgedoc",
         "version": "1.0.0",
+        "checks": checks,
         "profiles": list(detection_engine.profiles.keys()),
         "ner_models_loaded": list(detection_engine.nlp_models.keys()),
         "privacy": "100% Local / Zero Remote LLM Calls",
