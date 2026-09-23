@@ -1,0 +1,26 @@
+{
+  "summary": "FULL PASS. Anclora Purgedoc Encrypted Ruleset (.aprules) Export/Import feature validated end-to-end after RegexTestBench prop signature fix. Backend: 76/76 pytest cases pass in 57.79s (test_encrypted_ruleset.py + test_encrypted_ruleset_http.py + full regression across redaction, OCR, deskew, batch, security suites). Frontend E2E via Playwright on preview URL succeeded across all 7 steps: (1) open-rules-editor-btn opens editor cleanly with no React runtime errors; (2) create-rule-btn -> fill rule-name-input/rule-entity-input/rule-pattern-input -> RegexTestBench mounts, run-test-bench-btn returns 2 matches in 0.23ms with data-testid='test-bench-results'; (3) save-custom-rule-btn persists TEST_APRULE_FISCAL rule (visible in list as Activa); (4) export-encrypted-rules-btn opens dialog, export-password-input + export-confirm-password-input show 'Fuerte' strength; confirm-export-encrypted-btn downloads valid .aprules envelope {format='anclora-purgedoc-ruleset', format_version=1, crypto:{cipher='AES-256-GCM', kdf='Argon2id', salt(24B b64), nonce(16B b64), memory_cost_kib, time_cost, parallelism}, ciphertext(844 chars)}; ZERO plaintext leak verified (no 'TEST_APRULE_FISCAL', 'CUSTOM_FISCAL_ID', regex, or pattern fragments in outer JSON); (5) import-encrypted-rules-btn + import-aprules-file-input upload; wrong password triggers UI error 'Autenticación fallida: contraseña incorrecta o archivo manipulado' (backend 401 ENCRYPTED_RULESET_AUTH_FAILED); (6) correct password decrypt-preview-btn shows 'Reglas Descifradas con Éxito' with rules_count=1, canonical hash 'sha256:4a619dba2...', conflict options (Importar como Copia / Reemplazar existentes / Omitir en conflicto); (7) commit-import-rules-btn persists 'TEST_APRULE_FISCAL (Importada)' as Activa in rules list. Cryptographic contract, anti-tampering, zero-PII envelope, transactional preview, and commit all confirmed working through the UI.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_encrypted_ruleset.py",
+    "/app/backend/tests/test_encrypted_ruleset_http.py",
+    "/app/test_reports/pytest/iteration_12_all.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "RegexTestBench.js refactor is correct: accepts controlled props (pattern, caseSensitive, exampleValue, onSetExample, backendUrl) with graceful fallback to a `rule` prop; builds synthetic rule for POST /api/rules/test using entity_type='CUSTOM_SENSITIVE' default; useEffect sync on exampleValue works cleanly. No runtime crashes observed.",
+    "Envelope schema uses nested `crypto` sub-object holding cipher/kdf/salt/nonce/KDF params — slightly different from what the prior review expected (flat) but is semantically equivalent and still AAD-binds all crypto metadata. Consider documenting this schema in a README or JSON Schema file for downstream consumers.",
+    "Zero-PII envelope contract holds through the actual UI-driven export pipeline (verified by raw JSON grep of downloaded .aprules), not just unit tests.",
+    "Preview UX is excellent: displays ruleset name, rule count, version, canonical hash prefix, and conflict resolution radio buttons (Copy / Replace / Skip) without committing — transactional model well implemented.",
+    "Optional enhancement: expose canonical hash in downloaded envelope schema view for offline verification by operators."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (76/76 pytest)", "frontend": "100% (all 7 E2E steps pass)"},
+  "test_credentials": "N/A (sovereign, unauthenticated)",
+  "seed_data_creation": "Rule TEST_APRULE_FISCAL created live in the browser session (client-side custom-rules localStorage/state). Non-persistent across sessions.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Regression: `cd /app && PYTHONPATH=/app python -m pytest backend/tests/ -v` -> 76 pass ~58s. UI E2E flow fully wired with data-testids listed in review request. Note: envelope schema is nested { crypto: {cipher, kdf, salt, nonce, ...}, ciphertext } — future validators should look under `crypto` not flat top-level.",
+  "rca of the issue": "Prior blocker (RegexTestBench prop mismatch) resolved by main agent: component now destructures ({ pattern, caseSensitive, exampleValue, onSetExample, backendUrl, rule }) with initialText/effectivePattern/effectiveCaseSensitive fallbacks and builds internal payloadRule for POST /api/rules/test. No React runtime error appears; test-bench-input, run-test-bench-btn, test-bench-results all mount and behave correctly."
+}

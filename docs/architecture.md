@@ -1,7 +1,7 @@
 # ANCLORA PURGEDOC — ARQUITECTURA TÉCNICA
 
 ## 1. Visión General
-**Anclora Purgedoc** es una plataforma de ingeniería documental para la purga y redacción física real, privada y verificada de datos sensibles en archivos PDF y DOCX, tanto en procesamiento individual como en cola de procesamiento por lotes (*Batch Document Queue*) con monitorización en tiempo real mediante *Batch Progress Streaming (SSE)*, exportación forense tabular en *CSV* y gestión centralizada de ciclo de vida efímero (*Audit Retention Policies*).
+**Anclora Purgedoc** es una plataforma de ingeniería documental para la purga y redacción física real, privada y verificada de datos sensibles en archivos PDF y DOCX, tanto en procesamiento individual como en cola de procesamiento por lotes (*Batch Document Queue*) con monitorización en tiempo real mediante *Batch Progress Streaming (SSE)*, exportación forense tabular en *CSV*, gestión centralizada de ciclo de vida efímero (*Audit Retention Policies*) y portabilidad criptográfica de reglas (*Encrypted Profile Export & Import .aprules*).
 
 ```mermaid
 graph TD
@@ -13,6 +13,7 @@ graph TD
     D --> F[Motor de Detección Híbrido]
     F -->|Reglas Base YAML| G[Perfiles: RRHH, Legal, DevOps]
     F -->|Custom Ruleset Overlay| H[Motor de Reglas RE2 / Safe Regex]
+    H <-->|Export/Import Cifrado .aprules| CRYPTO[AES-256-GCM + Argon2id + AAD Binding]
     F -->|NLP Local| I[spaCy es_core_news_sm / en_core_web_sm]
     F -->|Mapeo coordenadas| J[PyMuPDF Word Bboxes / OCR Deskewed Bboxes]
     J -->|Revisión interactiva independiente| A
@@ -39,30 +40,51 @@ graph TD
 1. **Zero External AI / Cloud**: Ningún dato, fragmento, imagen o metadato se transmite a LLMs remotos ni APIs externas. 100% de la computación es local (spaCy, Tesseract, OpenCV, PyMuPDF, python-docx).
 2. **Ciclo de vida efímero gobernado por TTL**: Los archivos se procesan en `/tmp/anclora-purgedoc/{session_id}/{batch_id}/{document_id}/` con TTL de inactividad configurable y borrado explícito. No existe base de datos permanente de documentos ni de contenido sensible.
 3. **Auditoría Forense Criptográfica**: Las auditorías individuales y de lote nunca registran el texto sensible en texto plano, sino su hash SHA-256 (`sha256:...`).
-4. **Zero-PII en Streaming y Exportaciones Tabulares (CSV)**:
-   - Los nombres de archivo se pseudonimizan como `document-001.pdf` en CSV para evitar filtraciones de PII a través de nombres personales.
-   - Trazabilidad preservada estrictamente mediante `source_sha256` y `document_id`.
+4. **Zero-PII en Streaming y Exportaciones Cifradas (.aprules)**:
+   - El archivo `.aprules` encripta todo el contenido funcional (nombres, patrones, ejemplos, descripciones). El envelope exterior únicamente expone parámetros técnicos necesarios para el descifrado.
 
 ---
 
-## 3. Arquitectura del Ciclo de Vida y Retención (`services/lifecycle.py`)
+## 3. Especificación Criptográfica de Exportación e Importación (.aprules)
 
-### 3.1 Política de Expiración Basada en Inactividad
-- `SESSION_TTL_MINUTES=60`: Expiración calculada como `last_activity_at + ttl_seconds`. Las acciones humanas (subida, revisión, navegación, purga, descarga) renuevan el timestamp. Los heartbeats técnicos de SSE **NO** renuevan el TTL.
-- Protección del estado `awaiting_review`: Los artefactos fuente e intermedios no se eliminan mientras la sesión esté activa y en espera de decisión humana.
-- Expiración dependiente de ciclo de vida: Los documentos fuente pasan a ser elegibles para eliminación (`eligible_for_cleanup_at`) únicamente después de que el documento haya generado exitosamente un output `verified` y sus auditorías asociadas.
+### 3.1 Estructura del Envelope
+```json
+{
+  "format": "anclora-purgedoc-ruleset",
+  "format_version": 1,
+  "crypto": {
+    "cipher": "AES-256-GCM",
+    "kdf": "Argon2id",
+    "salt": "<base64_16_bytes>",
+    "nonce": "<base64_12_bytes>",
+    "memory_cost_kib": 65536,
+    "time_cost": 3,
+    "parallelism": 1
+  },
+  "ciphertext": "<base64_ciphertext_with_16_byte_auth_tag>"
+}
+```
 
-### 3.2 Protección de Operaciones Activas y Bloqueo de Concurrencia
-- Gestor de contexto `protect_operation(session_id, op_name)`: Incrementa un contador atómico `active_operations` bajo bloques `try/finally` para evitar carreras entre cleanup y operaciones en curso (OCR, purga, verificación, generación de ZIP o descargas).
-- Bloqueo de granularidad fina: `asyncio.Lock` independiente por sesión, lote y documento. Las operaciones batch no se bloquean entre lotes distintos.
+### 3.2 Primitivas y Autenticación con AAD
+- **Derivación de Clave (KDF)**: Argon2id derivando clave de 32 bytes (256 bits).
+- **Cifrado Autenticado (AEAD)**: AES-256-GCM con Nonce/IV único de 12 bytes generado con CSPRNG por cada exportación.
+- **AAD (Additional Authenticated Data)**: Serialización determinista y ordenada de los metadatos técnicos del envelope:
+  ```json
+  {"cipher":"AES-256-GCM","format":"anclora-purgedoc-ruleset","format_version":1,"kdf":"Argon2id","memory_cost_kib":65536,"nonce":"...","parallelism":1,"salt":"...","time_cost":3}
+  ```
+  Cualquier modificación maliciosa de los parámetros del envelope exterior invalida el tag de autenticación.
 
-### 3.3 Borrado Manual y Trazabilidad Tombstone
-- Borrado manual de lote: `DELETE /api/batches/{id}` elimina los archivos de ese lote exacto y limpia sus suscriptores en el event bus, dejando intactos los demás lotes de la sesión.
-- Borrado manual de sesión: `DELETE /api/sessions/{id}` ejecuta un borrado en cascada (lotes, documentos, temporales en disco, memoria y buses SSE).
-- Registro tombstone: El acceso a recursos eliminados o expirados responde con `HTTP 410 Gone` y `{ "code": "RESOURCE_EXPIRED", "detail": "RESOURCE_EXPIRED" }`.
+### 3.3 Validación de Parámetros Anti-DoS
+- Antes de ejecutar Argon2id, el servidor valida estrictamente los límites:
+  - `8192 <= memory_cost_kib <= 262144` (8 MiB a 256 MiB)
+  - `1 <= time_cost <= 10`
+  - `1 <= parallelism <= 4`
+  - `len(salt) == 16` y `len(nonce) == 12`
+  - `len(ciphertext) <= 5 MiB + 1024`
+- Cualquier valor anómalo es rechazado de inmediato con `UNSUPPORTED_CRYPTO_PARAMETERS`.
 
 ---
 
 ## 4. Limitaciones Conocidas y Alcance de Borrado
 1. **Alcance del Borrado**: La eliminación elimina los archivos y directorios gestionados por Anclora Purgedoc en `/tmp/`. No constituye un borrado físico seguro a nivel de hardware (SSD wear-leveling) ni tiene control sobre archivos que el usuario ya haya descargado a su dispositivo local.
-2. **Modularidad del Backend**: `server.py` agrupa endpoints de procesamiento, reglas, lotes, streaming y ciclo de vida. Se recomienda modularizar en routers dedicados (`routes/batch.py`, `routes/lifecycle.py`, etc.).
+2. **Modularidad del Backend**: `server.py` agrupa endpoints de procesamiento, reglas, lotes, streaming, ciclo de vida y criptografía. Se recomienda modularizar en routers dedicados (`routes/batch.py`, `routes/rules.py`, `routes/lifecycle.py`, etc.).
