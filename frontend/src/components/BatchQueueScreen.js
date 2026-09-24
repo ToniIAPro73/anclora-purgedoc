@@ -85,7 +85,7 @@ export const BatchQueueScreen = ({
       }
 
       const sseUrl = `${backendUrl}/api/batches/${batchId}/events?last_event_id=${lastSequenceRef.current}`;
-      const es = new EventSource(sseUrl);
+      const es = new EventSource(sseUrl, { withCredentials: true });
       eventSourceRef.current = es;
 
       es.onopen = () => {

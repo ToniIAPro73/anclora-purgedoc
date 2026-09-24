@@ -1,3 +1,4 @@
+from backend.tests.auth_helper import get_authenticated_session
 """Live HTTP tests for encrypted ruleset export/preview endpoints against a running backend."""
 import os
 import json
@@ -29,7 +30,8 @@ SAMPLE_RULESET = {
 
 
 def _export(password="StrongPass_2026!", name="HTTP Test Ruleset", description="desc"):
-    r = requests.post(f"{BASE_URL}/api/rules/export-encrypted", json={
+    s = get_authenticated_session(BASE_URL)
+    r = s.post(f"{BASE_URL}/api/rules/export-encrypted", json={
         "ruleset": SAMPLE_RULESET,
         "password": password,
         "ruleset_name": name,
@@ -57,7 +59,8 @@ def test_export_envelope_schema_and_zero_pii():
 
 def test_preview_correct_password():
     env = _export(password="Correct_Pw_123!").json()
-    r = requests.post(f"{BASE_URL}/api/rules/preview-encrypted", json={
+    s = get_authenticated_session(BASE_URL)
+    r = s.post(f"{BASE_URL}/api/rules/preview-encrypted", json={
         "envelope": env, "password": "Correct_Pw_123!"
     }, timeout=30)
     assert r.status_code == 200, r.text
@@ -68,7 +71,8 @@ def test_preview_correct_password():
 
 def test_preview_wrong_password_401():
     env = _export(password="Right_Pw_123!").json()
-    r = requests.post(f"{BASE_URL}/api/rules/preview-encrypted", json={
+    s = get_authenticated_session(BASE_URL)
+    r = s.post(f"{BASE_URL}/api/rules/preview-encrypted", json={
         "envelope": env, "password": "WRONG!"
     }, timeout=30)
     assert r.status_code == 401
@@ -81,7 +85,8 @@ def test_preview_tampered_ciphertext_401():
     ct = bytearray(base64.b64decode(env["ciphertext"]))
     ct[10] ^= 0xFF
     env["ciphertext"] = base64.b64encode(ct).decode("ascii")
-    r = requests.post(f"{BASE_URL}/api/rules/preview-encrypted", json={
+    s = get_authenticated_session(BASE_URL)
+    r = s.post(f"{BASE_URL}/api/rules/preview-encrypted", json={
         "envelope": env, "password": "Pw_123!"
     }, timeout=30)
     assert r.status_code == 401
@@ -91,7 +96,8 @@ def test_preview_tampered_ciphertext_401():
 def test_preview_tampered_aad_metadata_401():
     env = _export(password="Pw_123!").json()
     env["crypto"]["time_cost"] = 4
-    r = requests.post(f"{BASE_URL}/api/rules/preview-encrypted", json={
+    s = get_authenticated_session(BASE_URL)
+    r = s.post(f"{BASE_URL}/api/rules/preview-encrypted", json={
         "envelope": env, "password": "Pw_123!"
     }, timeout=30)
     assert r.status_code == 401

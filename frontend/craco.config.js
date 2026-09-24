@@ -101,6 +101,16 @@ let webpackConfig = {
       return webpackConfig;
     },
   },
+  jest: {
+    configure: (jestConfig) => {
+      jestConfig.moduleNameMapper = {
+        ...(jestConfig.moduleNameMapper || {}),
+        "^react-router-dom$": path.resolve(__dirname, "node_modules/react-router-dom/dist/index.js"),
+        "^react-router$": path.resolve(__dirname, "node_modules/react-router/dist/development/index.js"),
+      };
+      return jestConfig;
+    },
+  },
 };
 
 webpackConfig.devServer = (devServerConfig) => {

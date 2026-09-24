@@ -2,6 +2,11 @@ import pytest
 import os
 import requests
 import json
+try:
+    from backend.tests.auth_helper import get_authenticated_session
+except ImportError:
+    from tests.auth_helper import get_authenticated_session
+
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "http://localhost:8001").rstrip("/")
 
@@ -17,7 +22,7 @@ def test_sensitive_log_and_audit_leakage():
       - Audit PDF text
     - Asserts that sensitive plaintext NEVER leaks into logs or audit manifests!
     """
-    s = requests.Session()
+    s = get_authenticated_session(BASE_URL)
     # 1. Create session
     r = s.post(f"{BASE_URL}/api/sessions", timeout=15)
     assert r.status_code == 200

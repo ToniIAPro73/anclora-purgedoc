@@ -1,9 +1,16 @@
 # ANCLORA PURGEDOC — MVP 1.0
 
-Plataforma de purga documental real, privada y verificada para archivos PDF y DOCX con informe de auditoría criptográfico.
+Plataforma de purga documental real, privada y verificada para archivos PDF y DOCX con informe de auditoría criptográfico y modelo de acceso cerrado por lista blanca.
+
+## Modelo de Acceso y Rutas
+
+- `/`: Landing pública premium con explicación de capacidades reales (redacción física, OCR local spa+eng, spaCy NER + regex, verificación fail-closed, auditoría SHA-256).
+- `/login`: Pantalla de autenticación dedicada por correo y contraseña, con botones sociales (Google y GitHub) visibles pero deshabilitados ("Próximamente").
+- `/activate`: Activación de cuenta mediante token criptográfico de un solo uso entregado por un administrador.
+- `/app`: Workspace protegido de PurgeDoc. Las sesiones y lotes efímeros sólo se inicializan tras autenticación.
 
 ## Características Principales
-- **100% Procesamiento Local**: Cero llamadas a APIs de LLM externas o nubes de terceros. Motor NER con spaCy (`es_core_news_sm`, `en_core_web_sm`) y reglas regex configurables en YAML (`backend/config/profiles/*.yaml`).
+- **100% Procesamiento Privado**: Cero llamadas a APIs de LLM externas. Motor NER con spaCy (`es_core_news_sm`, `en_core_web_sm`) y reglas regex configurables en YAML (`backend/config/profiles/*.yaml`).
 - **Perfiles Verticales Especializados**:
   - **RRHH / Nóminas**: DNI, NIE, SSN, IBAN, salarios, nombres, teléfonos y direcciones.
   - **Legal / Contratos**: CIF, DNI de otorgantes, autos judiciales, cláusulas y honorarios.
@@ -12,8 +19,25 @@ Plataforma de purga documental real, privada y verificada para archivos PDF y DO
   - En **PDF**: Eliminación física de comandos y streams mediante PyMuPDF (`apply_redactions`) con recolección de basura.
   - En **DOCX**: Saneamiento profundo de paquetes OOXML (`word/document.xml`, tablas, headers, footers y `core.xml`).
 - **Verificación Fail-Closed**: Reinspección automática post-proceso. Si queda cualquier residuo, se bloquea la certificación de seguridad.
-- **Auditoría Forense Criptográfica**: Exportación en PDF imprimible y JSON estructurado sin exponer datos en claro (hashing SHA-256).
+- **Auditoría Forense Criptográfica**: Exportación en PDF imprimible, JSON estructurado y CSV sin exponer datos en claro (hashing SHA-256).
 - **Diseño & Accesibilidad**: Interfaz en español e inglés (ES/EN), modos Claro / Oscuro / Sistema (Oscuro por defecto), visor interactivo con bounding boxes sincronizados y accesibilidad WCAG 2.1 AA.
+- **Seguridad & Gobernanza**: Hashing Argon2id, tokens JWT mediante cookies HttpOnly, rotación de invitaciones y gestión administrativa por CLI.
+
+## Gestión Administrativa de Whitelist (CLI)
+
+```bash
+# Añadir invitación
+python backend/scripts/manage_whitelist.py add --email usuario@empresa.com
+
+# Listar invitaciones
+python backend/scripts/manage_whitelist.py list
+
+# Rotar token
+python backend/scripts/manage_whitelist.py rotate --target usuario@empresa.com
+
+# Revocar acceso
+python backend/scripts/manage_whitelist.py revoke --target usuario@empresa.com
+```
 
 ## Puesta en Marcha Local
 
@@ -23,13 +47,13 @@ Plataforma de purga documental real, privada y verificada para archivos PDF y DO
 - LibreOffice (`soffice`) es opcional: si no está, la vista previa DOCX usa un PDF generado con PyMuPDF.
 
 ### Configuración
-Copia `backend/.env.example` y `frontend/.env.example` a `.env.local` (ficheros ignorados por Git, modo `0600`). El backend no carga `.env` por sí mismo: exporta las variables en la shell o deja los valores por defecto.
+Copia `backend/.env.example` y `frontend/.env.example` a `.env.local` (ficheros ignorados por Git, modo `0600`).
 
 ### Backend (desde la raíz del repositorio)
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -r backend/requirements.txt   # incluye los modelos spaCy es/en
+python3.12 -m venv backend/.venv
+source backend/.venv/bin/activate
+pip install -r backend/requirements.txt
 PYTHONPATH=. uvicorn backend.server:app --host 127.0.0.1 --port 8001
 ```
 
@@ -55,5 +79,5 @@ REACT_APP_BACKEND_URL=http://127.0.0.1:8001 PYTHONPATH=. pytest \
   backend/tests/security/test_sensitive_log_leakage.py
 
 # Frontend
-cd frontend && CI=true yarn test --watchAll=false --passWithNoTests && yarn build
+cd frontend && CI=true yarn test --watchAll=false && yarn build
 ```

@@ -6,8 +6,10 @@ from PIL import Image, ImageDraw, ImageFont
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
-def generate_all_fixtures():
+def generate_all_fixtures(force: bool = False):
     os.makedirs(FIXTURES_DIR, exist_ok=True)
+    if not force and (FIXTURES_DIR / "sample_multipage_skew.pdf").exists() and (FIXTURES_DIR / "sample_rrhh_payroll.pdf").exists():
+        return
     generate_hr_pdf()
     generate_legal_docx()
     generate_support_pdf()
@@ -81,7 +83,7 @@ def generate_skewed_fixtures():
     doc_multi = fitz.open()
     for angle in [0.0, 3.5, -4.0]:
         img_page = _draw_sample_scanned_image(extra_skew=angle)
-        tmp_p = FIXTURES_DIR / f"tmp_multi_{angle}.png"
+        tmp_p = FIXTURES_DIR / f"tmp_multi_{os.getpid()}_{angle}.png"
         img_page.save(str(tmp_p), format="PNG")
         page = doc_multi.new_page(width=595, height=842)
         page.insert_image(page.rect, filename=str(tmp_p))

@@ -7,11 +7,12 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from sqlalchemy import pool
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from db.models import Base  # noqa: E402
+from auth.models import AuthBase  # noqa: E402
 
 config = context.config
 if config.config_file_name:
     fileConfig(config.config_file_name)
-target_metadata = Base.metadata
+target_metadata = [Base.metadata, AuthBase.metadata]
 
 def database_url():
     url = os.environ.get("DATABASE_URL_UNPOOLED") or os.environ.get("DATABASE_URL")

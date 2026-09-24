@@ -11,7 +11,12 @@ import { ReviewPanel } from "./components/ReviewPanel";
 import { ConfirmationModal } from "./components/ConfirmationModal";
 import { ResultsScreen } from "./components/ResultsScreen";
 import { CustomRulesetEditor } from "./components/CustomRulesetEditor";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "./context/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
+import Landing from "./components/Landing";
+import Login from "./components/Login";
+import ActivateAccess from "./components/ActivateAccess";
 import "./App.css";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -484,10 +489,29 @@ function PurgedocMainApp() {
   );
 }
 
+export { PurgedocMainApp };
+
 export default function App() {
   return (
-    <AppProvider>
-      <PurgedocMainApp />
-    </AppProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <AppProvider>
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/activate" element={<ActivateAccess />} />
+            <Route
+              path="/app"
+              element={
+                <ProtectedRoute>
+                  <PurgedocMainApp />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </AppProvider>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }

@@ -21,13 +21,14 @@ class SessionStore:
         self.batch_file_paths: Dict[str, Dict[str, str]] = {} # batch_id -> paths
         os.makedirs(TEMP_ROOT, exist_ok=True)
 
-    def create_session(self, session_id: str):
+    def create_session(self, session_id: str, user_id: Optional[str] = None):
         session_dir = os.path.join(TEMP_ROOT, session_id)
         os.makedirs(session_dir, exist_ok=True)
         self.sessions[session_id] = {
             "created_at": time.time(),
             "last_active": time.time(),
-            "dir": session_dir
+            "dir": session_dir,
+            "user_id": user_id
         }
         return session_dir
 
@@ -37,7 +38,7 @@ class SessionStore:
 
     def get_session_dir(self, session_id: str) -> str:
         if session_id not in self.sessions:
-            return self.create_session(session_id)
+            raise KeyError(f"Session {session_id} not found or expired")
         return self.sessions[session_id]["dir"]
 
     def get_document_dir(self, session_id: str, batch_id: Optional[str], doc_id: str) -> str:
@@ -113,7 +114,6 @@ class SessionStore:
         for b_id in batches_to_del:
             self.batches.pop(b_id, None)
             self.batch_file_paths.pop(b_id, None)
-
             batch_event_bus.cleanup_batch(b_id)
         # Clean docs belonging to session
         docs_to_del = [doc_id for doc_id, doc in self.documents.items() if doc.session_id == session_id]

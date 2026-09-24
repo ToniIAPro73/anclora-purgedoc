@@ -117,4 +117,5 @@ frontend/coverage/
 # and on every pytest session; bytes differ on each run, so they are not versioned.
 backend/fixtures/
 artifacts/qa/
+backend/tessdata/
 .env*

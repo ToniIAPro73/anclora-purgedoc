@@ -1,10 +1,12 @@
-import React, { useState } from "react";
+import React from "react";
 import axios from "axios";
 import { useApp } from "../context/AppContext";
-import { Moon, Sun, Monitor, Globe, FileCode2, Check, Sliders } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { FileCode2, Sliders, Layers, LogOut } from "lucide-react";
 import { BrandMark } from "./BrandMark";
+import LangToggle from "./LangToggle";
+import ThemeToggle from "./ThemeToggle";
 
-import { Layers } from "lucide-react";
 export const Header = ({
   onOpenDevFixtures,
   onOpenRulesEditor,
@@ -12,17 +14,18 @@ export const Header = ({
   activeMode = "single",
   onToggleMode,
   sessionId,
-  BACKEND_URL
+  BACKEND_URL,
 }) => {
-  const { themeMode, setThemeMode, cycleTheme, lang, toggleLanguage, t } = useApp();
-  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const { t } = useApp();
+  const auth = useAuth();
+  const user = auth?.user || null;
+  const logout = auth?.logout || (() => {});
 
   const isDevMode = true; // Enabled in dev/preview environment
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-800 bg-[#0B0F19]/90 backdrop-blur-md transition-colors dark:bg-[#0B0F19]/95 dark:border-slate-800 light:bg-white/95 light:border-slate-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        
         {/* Left: Reserved Logo Slot & Product Name */}
         <div className="flex items-center gap-3">
           <div
@@ -41,7 +44,7 @@ export const Header = ({
           </div>
         </div>
 
-        {/* Right Controls: Custom Rules + Dev Fixtures + ES/EN Pill + Circular Theme Switcher */}
+        {/* Right Controls: Custom Rules + Dev Fixtures + Shared Lang & Theme Toggles + User */}
         <div className="flex items-center gap-3">
           {/* Ephemeral Session TTL & Delete Session Now Button */}
           {sessionId && (
@@ -57,7 +60,11 @@ export const Header = ({
                 type="button"
                 data-testid="delete-session-now-btn"
                 onClick={async () => {
-                  if (window.confirm("¿Eliminar todos los documentos, auditorías y sesiones de forma inmediata e irreversible?")) {
+                  if (
+                    window.confirm(
+                      "¿Eliminar todos los documentos, auditorías y sesiones de forma inmediata e irreversible?"
+                    )
+                  ) {
                     try {
                       await axios.delete(`${BACKEND_URL}/api/sessions/${sessionId}`);
                       window.location.reload();
@@ -73,7 +80,7 @@ export const Header = ({
               </button>
             </div>
           )}
-          
+
           {/* Mode Switcher: Single vs Batch */}
           {onToggleMode && (
             <button
@@ -91,6 +98,7 @@ export const Header = ({
               <span>{t("batch_mode_btn")}</span>
             </button>
           )}
+
           {/* Custom Rules Button */}
           {onOpenRulesEditor && (
             <button
@@ -127,91 +135,35 @@ export const Header = ({
             </button>
           )}
 
-          {/* Language Toggle: Custom Pill Button */}
-          <button
-            type="button"
-            data-testid="language-toggle-btn"
-            onClick={toggleLanguage}
-            className="flex items-center gap-1.5 px-3 py-1.5 h-9 rounded-full bg-[#0E1525] border border-cyan-500/40 hover:border-cyan-400 text-[#F5F7FA] text-xs font-semibold shadow-[0_0_12px_rgba(59,130,246,0.15)] hover:shadow-[0_0_15px_rgba(56,189,248,0.25)] transition-all"
-            aria-label={`Switch language to ${lang === "es" ? "English" : "Spanish"}`}
-          >
-            <Globe className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="tracking-wide font-mono uppercase">{lang}</span>
-          </button>
+          {/* Canonical Shared Lang & Theme Toggles */}
+          <LangToggle />
+          <ThemeToggle />
 
-          {/* Theme Switcher: Circular Pill Button with Subtle Cyan Glow */}
-          <div className="relative">
-            <button
-              type="button"
-              data-testid="theme-toggle-btn"
-              onClick={() => setThemeMenuOpen(!themeMenuOpen)}
-              className="w-9 h-9 rounded-full bg-[#0E1525] border border-cyan-500/40 hover:border-cyan-400 text-[#F5F7FA] flex items-center justify-center shadow-[0_0_12px_rgba(59,130,246,0.15)] hover:shadow-[0_0_15px_rgba(56,189,248,0.25)] transition-all"
-              aria-label="Theme selector"
-              aria-expanded={themeMenuOpen}
-            >
-              {themeMode === "dark" && <Moon className="w-4 h-4 text-cyan-400" />}
-              {themeMode === "light" && <Sun className="w-4 h-4 text-amber-400" />}
-              {themeMode === "system" && <Monitor className="w-4 h-4 text-blue-400" />}
-            </button>
-
-            {/* Dropdown Menu for Theme Selection */}
-            {themeMenuOpen && (
-              <div className="absolute right-0 mt-2 w-36 rounded-xl bg-[#111827] border border-slate-700 shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
-                <button
-                  type="button"
-                  data-testid="theme-option-dark"
-                  onClick={() => {
-                    setThemeMode("dark");
-                    setThemeMenuOpen(false);
-                  }}
-                  className={`w-full px-3 py-2 text-xs flex items-center justify-between text-left hover:bg-slate-800 ${
-                    themeMode === "dark" ? "text-cyan-400 font-semibold" : "text-slate-300"
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <Moon className="w-3.5 h-3.5" /> Oscuro / Dark
-                  </span>
-                  {themeMode === "dark" && <Check className="w-3 h-3" />}
-                </button>
-                <button
-                  type="button"
-                  data-testid="theme-option-light"
-                  onClick={() => {
-                    setThemeMode("light");
-                    setThemeMenuOpen(false);
-                  }}
-                  className={`w-full px-3 py-2 text-xs flex items-center justify-between text-left hover:bg-slate-800 ${
-                    themeMode === "light" ? "text-cyan-400 font-semibold" : "text-slate-300"
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <Sun className="w-3.5 h-3.5" /> Claro / Light
-                  </span>
-                  {themeMode === "light" && <Check className="w-3 h-3" />}
-                </button>
-                <button
-                  type="button"
-                  data-testid="theme-option-system"
-                  onClick={() => {
-                    setThemeMode("system");
-                    setThemeMenuOpen(false);
-                  }}
-                  className={`w-full px-3 py-2 text-xs flex items-center justify-between text-left hover:bg-slate-800 ${
-                    themeMode === "system" ? "text-cyan-400 font-semibold" : "text-slate-300"
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <Monitor className="w-3.5 h-3.5" /> Sistema / System
-                  </span>
-                  {themeMode === "system" && <Check className="w-3 h-3" />}
-                </button>
-              </div>
-            )}
-          </div>
-
+          {/* Authenticated User Status & Logout */}
+          {user && (
+            <div className="flex items-center gap-2 pl-2 border-l border-slate-700/60">
+              <span
+                data-testid="header-user-display"
+                className="hidden lg:inline-block text-xs font-medium text-slate-400"
+              >
+                {user.display_name || user.email}
+              </span>
+              <button
+                type="button"
+                data-testid="auth-logout-button"
+                onClick={logout}
+                title="Cerrar sesión / Logout"
+                aria-label="Cerrar sesión"
+                className="p-1.5 rounded-md text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
-
       </div>
     </header>
   );
 };
+
+export default Header;

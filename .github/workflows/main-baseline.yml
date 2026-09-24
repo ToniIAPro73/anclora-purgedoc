@@ -57,6 +57,11 @@ jobs:
     timeout-minutes: 30
     env:
       PYTHONPATH: ${{ github.workspace }}
+      DATABASE_URL: sqlite:////tmp/purgedoc-ci.db
+      AUTH_ADMIN_EMAILS: qa.purgedoc@anclora.local
+      JWT_SECRET: ci-test-secret-purgedoc-jwt-key-minimum-32-chars
+      ENABLE_DEV_FIXTURES: "true"
+      APP_ENV: test
     steps:
       - name: Checkout
         uses: actions/checkout@v4

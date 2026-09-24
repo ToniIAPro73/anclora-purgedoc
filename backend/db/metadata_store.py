@@ -41,8 +41,13 @@ class MetadataStore:
             operation(db)
             db.commit()
 
-    def session_started(self, session_id: str, created_at: datetime) -> None:
-        self._commit(lambda db: db.merge(SessionRow(id=session_id, status="active", created_at=created_at, last_activity_at=created_at)))
+    def session_started(self, session_id: str, created_at: datetime, user_id: Optional[str] = None) -> None:
+        def operation(db):
+            db.merge(SessionRow(id=session_id, status="active", created_at=created_at, last_activity_at=created_at))
+            if user_id:
+                from backend.auth.models import SessionOwnerRow
+                db.merge(SessionOwnerRow(session_id=session_id, user_id=user_id, created_at=created_at))
+        self._commit(operation)
 
     def batch_created(self, batch: Any) -> None:
         self._commit(lambda db: db.merge(BatchRow(id=batch.id, session_id=batch.session_id, status=batch.status,

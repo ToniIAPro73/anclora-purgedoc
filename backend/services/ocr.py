@@ -1,3 +1,5 @@
+import os
+from pathlib import Path
 import io
 import re
 import logging
@@ -10,6 +12,11 @@ from backend.models import BoundingBox
 from backend.services.deskew import deskew_normalizer
 
 logger = logging.getLogger(__name__)
+
+# Auto-configure TESSDATA_PREFIX if local backend/tessdata exists
+_repo_tessdata = Path(__file__).resolve().parent.parent / "tessdata"
+if _repo_tessdata.is_dir() and "TESSDATA_PREFIX" not in os.environ:
+    os.environ["TESSDATA_PREFIX"] = str(_repo_tessdata)
 
 NON_PII_BOILERPLATE = {
     "informe", "aptitud", "laboral", "centro", "medico", "departamento",

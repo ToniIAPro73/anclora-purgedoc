@@ -9,14 +9,11 @@ import requests
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "http://127.0.0.1:8001").rstrip("/")
 
 
+from backend.tests.auth_helper import get_authenticated_session
+
 @pytest.fixture(scope="module")
 def session():
-    s = requests.Session()
-    # Retry mechanism for robust testing
-    adapter = requests.adapters.HTTPAdapter(max_retries=3)
-    s.mount("https://", adapter)
-    s.mount("http://", adapter)
-    return s
+    return get_authenticated_session(BASE_URL)
 
 
 @pytest.fixture(scope="module")
