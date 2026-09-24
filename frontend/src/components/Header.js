@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import axios from "axios";
 import { useApp } from "../context/AppContext";
-import { ShieldCheck, Moon, Sun, Monitor, Globe, FileCode2, Check, Sliders } from "lucide-react";
+import { Moon, Sun, Monitor, Globe, FileCode2, Check, Sliders } from "lucide-react";
+import { BrandMark } from "./BrandMark";
 
 import { Layers } from "lucide-react";
 export const Header = ({
@@ -26,9 +27,9 @@ export const Header = ({
         <div className="flex items-center gap-3">
           <div
             data-testid="header-logo-slot"
-            className="w-9 h-9 rounded-lg bg-blue-950/60 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-sm"
+            className="w-9 h-9 rounded-full border border-cyan-500/30 flex items-center justify-center overflow-hidden shadow-sm"
           >
-            <ShieldCheck className="w-5 h-5 text-cyan-400" />
+            <BrandMark className="w-full h-full" />
           </div>
           <div className="flex flex-col">
             <span className="font-bold text-lg tracking-tight text-white dark:text-white light:text-slate-900">
