@@ -374,10 +374,10 @@ export const BatchQueueScreen = ({
     <div className="max-w-6xl mx-auto py-6 px-4 sm:px-6 space-y-6">
       
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-2xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
+            <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
               <Layers className="w-6 h-6 text-cyan-400" />
               {t("batch_title")}
             </h1>
@@ -403,7 +403,7 @@ export const BatchQueueScreen = ({
               Workers: {activeWorkers} / {limits.max_concurrent} máx
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-1">{t("batch_subtitle")}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t("batch_subtitle")}</p>
         </div>
 
         {/* Global Batch Controls */}
@@ -424,7 +424,7 @@ export const BatchQueueScreen = ({
                 href={`${backendUrl}/api/batches/${batchId}/audit.pdf`}
                 data-testid="batch-audit-pdf-btn"
                 download
-                className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition-colors"
+                className="px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 transition-colors"
               >
                 <FileCheck2 className="w-3.5 h-3.5 text-cyan-400" />
                 <span>{t("batch_btn_audit_pdf")}</span>
@@ -434,7 +434,7 @@ export const BatchQueueScreen = ({
                 href={`${backendUrl}/api/batches/${batchId}/audit.json`}
                 data-testid="batch-audit-json-btn"
                 download
-                className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition-colors"
+                className="px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 transition-colors"
               >
                 <FileJson className="w-3.5 h-3.5 text-cyan-400" />
                 <span>{t("batch_btn_audit_json")}</span>
@@ -443,7 +443,7 @@ export const BatchQueueScreen = ({
                 href={`${backendUrl}/api/batches/${batchId}/audit.csv`}
                 data-testid="batch-audit-csv-btn"
                 download
-                className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition-colors"
+                className="px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 transition-colors"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 text-cyan-400" />
                 <span>{t("batch_btn_audit_csv")}</span>
@@ -482,7 +482,7 @@ export const BatchQueueScreen = ({
               type="button"
               data-testid="cancel-batch-btn"
               onClick={handleCancelBatch}
-              className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 text-xs font-medium border border-slate-700 hover:border-rose-800 transition-colors"
+              className="px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-rose-100 dark:hover:bg-rose-950 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-300 text-xs font-medium border border-slate-300 dark:border-slate-700 hover:border-rose-300 dark:hover:border-rose-800 transition-colors"
               title="Cancelar Lote"
             >
               <Ban className="w-3.5 h-3.5" />
@@ -503,7 +503,7 @@ export const BatchQueueScreen = ({
                 }
               }
             }}
-            className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 text-xs font-medium border border-slate-700 hover:border-rose-800 transition-colors flex items-center gap-1.5"
+            className="px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-rose-100 dark:hover:bg-rose-950 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-300 text-xs font-medium border border-slate-300 dark:border-slate-700 hover:border-rose-300 dark:hover:border-rose-800 transition-colors flex items-center gap-1.5"
             title={t("batch_delete_now_btn")}
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -522,34 +522,34 @@ export const BatchQueueScreen = ({
 
       {/* Metrics Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-        <div className="p-3 rounded-xl bg-[#111827] border border-slate-800">
+        <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#111827] border border-slate-200 dark:border-slate-800">
           <span className="text-[10px] font-mono text-slate-500 uppercase block mb-1">
             {t("batch_stat_total")}
           </span>
-          <span className="text-base font-bold text-white">
+          <span className="text-base font-bold text-slate-900 dark:text-white">
             {totalDocs} <span className="text-xs font-normal text-slate-500">/ {limits.max_documents} máx</span>
           </span>
         </div>
 
-        <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-900/60">
-          <span className="text-[10px] font-mono text-emerald-400 uppercase block mb-1">
+        <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60">
+          <span className="text-[10px] font-mono text-emerald-700 dark:text-emerald-400 uppercase block mb-1">
             {t("batch_stat_verified")}
           </span>
-          <span className="text-base font-bold text-emerald-300">{verifiedDocs}</span>
+          <span className="text-base font-bold text-emerald-800 dark:text-emerald-300">{verifiedDocs}</span>
         </div>
 
-        <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-900/60">
-          <span className="text-[10px] font-mono text-amber-400 uppercase block mb-1">
+        <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60">
+          <span className="text-[10px] font-mono text-amber-700 dark:text-amber-400 uppercase block mb-1">
             {t("batch_stat_review")}
           </span>
-          <span className="text-base font-bold text-amber-300">{inReviewDocs}</span>
+          <span className="text-base font-bold text-amber-800 dark:text-amber-300">{inReviewDocs}</span>
         </div>
 
-        <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-          <span className="text-[10px] font-mono text-slate-400 uppercase block mb-1">
+        <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 uppercase block mb-1">
             {t("batch_stat_errors")}
           </span>
-          <span className="text-base font-bold text-slate-300">{errorDocs}</span>
+          <span className="text-base font-bold text-slate-700 dark:text-slate-300">{errorDocs}</span>
         </div>
       </div>
 
@@ -563,7 +563,7 @@ export const BatchQueueScreen = ({
             if (e.dataTransfer.files) handleFilesAdded(e.dataTransfer.files);
           }}
           onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-slate-700 hover:border-cyan-500/60 rounded-2xl p-6 text-center cursor-pointer bg-[#111827]/70 hover:bg-[#111827] transition-all"
+          className="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-cyan-500/60 rounded-2xl p-6 text-center cursor-pointer bg-slate-50 dark:bg-[#111827]/70 hover:bg-slate-100 dark:hover:bg-[#111827] transition-all"
         >
           <input
             type="file"
@@ -580,7 +580,7 @@ export const BatchQueueScreen = ({
           <div className="w-10 h-10 mx-auto rounded-full bg-blue-950/60 border border-cyan-500/30 flex items-center justify-center text-cyan-400 mb-2">
             {isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <UploadCloud className="w-5 h-5" />}
           </div>
-          <p className="text-sm font-semibold text-slate-200">
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
             {t("batch_dropzone_prompt")}
           </p>
           <p className="text-[11px] text-slate-500 mt-1">
@@ -593,11 +593,11 @@ export const BatchQueueScreen = ({
       )}
 
       {/* Filters & Queue Table */}
-      <div className="bg-[#111827] rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
-        <div className="p-3.5 border-b border-slate-800 bg-[#0E1525] flex items-center justify-between gap-3 flex-wrap">
+      <div className="bg-white dark:bg-[#111827] rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xl">
+        <div className="p-3.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0E1525] flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-white uppercase font-mono">Cola de Documentos</span>
-            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400">
+            <span className="text-xs font-bold text-slate-900 dark:text-white uppercase font-mono">Cola de Documentos</span>
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
               {filteredDocs.length} visibles
             </span>
           </div>
@@ -608,7 +608,7 @@ export const BatchQueueScreen = ({
               data-testid="batch-filter-status"
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-300 focus:outline-none focus:border-cyan-500"
+              className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:border-cyan-500"
             >
               <option value="all">{t("batch_filter_all")}</option>
               <option value="review">{t("batch_filter_review")}</option>
@@ -621,8 +621,8 @@ export const BatchQueueScreen = ({
 
         {/* Documents Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-[#0B0F19] text-[11px] uppercase font-mono text-slate-400 border-b border-slate-800">
+          <table className="w-full text-left text-xs text-slate-700 dark:text-slate-300">
+            <thead className="bg-slate-100 dark:bg-[#0B0F19] text-[11px] uppercase font-mono text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
               <tr>
                 <th className="py-2.5 px-4">{t("batch_col_doc")}</th>
                 <th className="py-2.5 px-3">{t("batch_col_type")}</th>
@@ -632,7 +632,7 @@ export const BatchQueueScreen = ({
                 <th className="py-2.5 px-4 text-right">{t("batch_col_actions")}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/80 font-sans">
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800/80 font-sans">
               {filteredDocs.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-slate-500 italic text-xs">
@@ -646,14 +646,14 @@ export const BatchQueueScreen = ({
                     <tr
                       key={doc.id}
                       data-testid={`batch-doc-row-${doc.id}`}
-                      className="hover:bg-slate-900/50 transition-colors"
+                      className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors"
                     >
                       {/* Filename & size */}
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
                           <FileText className={`w-4 h-4 shrink-0 ${isPdf ? "text-cyan-400" : "text-blue-400"}`} />
                           <div className="min-w-0">
-                            <span className="font-semibold text-white block truncate max-w-[220px]" title={doc.filename}>
+                            <span className="font-semibold text-slate-900 dark:text-white block truncate max-w-[220px]" title={doc.filename}>
                               {doc.filename}
                             </span>
                             <span className="text-[10px] text-slate-500 font-mono">
@@ -665,7 +665,7 @@ export const BatchQueueScreen = ({
 
                       {/* Type */}
                       <td className="py-3 px-3">
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                           {isPdf ? "PDF" : "DOCX"}
                         </span>
                       </td>
@@ -677,7 +677,7 @@ export const BatchQueueScreen = ({
                             data-testid={`doc-profile-select-${doc.id}`}
                             value={doc.profile_id}
                             onChange={(e) => handleProfileChange(doc.id, e.target.value)}
-                            className="text-[11px] py-1 px-1.5 rounded bg-slate-900 border border-slate-700 text-cyan-300 font-mono"
+                            className="text-[11px] py-1 px-1.5 rounded bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-cyan-700 dark:text-cyan-300 font-mono"
                           >
                             <option value="rrhh">RRHH</option>
                             <option value="legal">Legal</option>
@@ -699,7 +699,7 @@ export const BatchQueueScreen = ({
                       <td className="py-3 px-3">
                         {doc.matches_count !== undefined && doc.matches_count > 0 ? (
                           <div className="text-[11px] font-mono space-x-1.5">
-                            <span className="text-white font-bold">{doc.matches_count}</span>
+                            <span className="text-slate-900 dark:text-white font-bold">{doc.matches_count}</span>
                             <span className="text-emerald-400">({doc.accepted_count}✓</span>
                             <span className="text-slate-400">{doc.rejected_count}✗</span>
                             <span className="text-amber-400">{doc.pending_count}?)</span>
@@ -732,7 +732,7 @@ export const BatchQueueScreen = ({
                               type="button"
                               data-testid={`cancel-doc-btn-${doc.id}`}
                               onClick={() => handleCancelDoc(doc.id)}
-                              className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-amber-400"
+                              className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-amber-500 dark:hover:text-amber-400"
                               title={t("batch_action_cancel")}
                             >
                               <Ban className="w-3.5 h-3.5" />
@@ -745,7 +745,7 @@ export const BatchQueueScreen = ({
                               type="button"
                               data-testid={`remove-doc-btn-${doc.id}`}
                               onClick={() => handleRemoveDoc(doc.id)}
-                              className="p-1 rounded hover:bg-red-950 text-slate-500 hover:text-rose-400"
+                              className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-950 text-slate-500 hover:text-rose-500 dark:hover:text-rose-400"
                               title={t("batch_action_remove")}
                             >
                               <Trash2 className="w-3.5 h-3.5" />

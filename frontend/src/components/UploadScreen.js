@@ -91,8 +91,8 @@ export const UploadScreen = ({
         onClick={() => fileInputRef.current?.click()}
         className={`relative border-2 border-dashed rounded-2xl p-6 sm:p-8 text-center cursor-pointer transition-all ${
           selectedFile
-            ? "border-cyan-500 bg-cyan-950/20"
-            : "border-slate-700 hover:border-cyan-500/60 bg-[#111827]/70 hover:bg-[#111827]"
+            ? "border-cyan-500 bg-cyan-50 dark:bg-cyan-950/20"
+            : "border-slate-300 dark:border-slate-700 hover:border-cyan-500/60 bg-slate-50 dark:bg-[#111827]/70 hover:bg-slate-100 dark:hover:bg-[#111827]"
         }`}
       >
         <input
@@ -117,28 +117,28 @@ export const UploadScreen = ({
             <span className="text-xs font-mono uppercase tracking-wider text-cyan-400">
               {t("selected_file")}
             </span>
-            <p className="text-base sm:text-lg font-bold text-white mt-1 break-all">
+            <p className="text-base sm:text-lg font-bold text-slate-900 dark:text-white mt-1 break-all">
               {selectedFile.name}
             </p>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
               {(selectedFile.size / 1024).toFixed(1)} KB • {selectedFile.name.endsWith(".pdf") ? "PDF Nativo" : "DOCX OOXML"}
             </p>
           </div>
         ) : (
           <div>
-            <p className="text-base font-semibold text-slate-200">
+            <p className="text-base font-semibold text-slate-700 dark:text-slate-200">
               {t("dropzone_prompt")}{" "}
-              <span className="text-cyan-400 underline decoration-cyan-400/50 underline-offset-4">
+              <span className="text-cyan-600 dark:text-cyan-400 underline decoration-cyan-400/50 underline-offset-4">
                 {t("dropzone_browse")}
               </span>
             </p>
-            <p className="text-xs text-slate-400 mt-2">{t("dropzone_formats")}</p>
-            <p className="text-xs text-slate-500 mt-1">{t("dropzone_max")}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">{t("dropzone_formats")}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">{t("dropzone_max")}</p>
           </div>
         )}
 
         {/* Privacy Microcopy */}
-        <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-center gap-2 text-[11px] text-slate-400">
+        <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800/80 flex items-center justify-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
           <ShieldAlert className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{t("dropzone_guarantee")}</span>
         </div>
@@ -175,18 +175,18 @@ export const UploadScreen = ({
                 onClick={() => setSelectedProfile(p.id)}
                 className={`p-4 rounded-xl border text-left cursor-pointer transition-all ${
                   isSelected
-                    ? "bg-slate-900 border-cyan-400 shadow-[0_0_15px_rgba(56,189,248,0.15)] ring-1 ring-cyan-400"
-                    : "bg-[#111827]/70 border-slate-800 hover:border-slate-700 hover:bg-[#111827]"
+                    ? "bg-cyan-50 dark:bg-slate-900 border-cyan-400 shadow-[0_0_15px_rgba(56,189,248,0.15)] ring-1 ring-cyan-400"
+                    : "bg-white dark:bg-[#111827]/70 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-[#111827]"
                 }`}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700">
+                  <span className="text-xs font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-cyan-700 dark:text-cyan-300 border border-slate-300 dark:border-slate-700">
                     {p.badge}
                   </span>
                   {isSelected && <CheckCircle className="w-4 h-4 text-cyan-400" />}
                 </div>
-                <h3 className="text-sm font-semibold text-white">{t(p.titleKey)}</h3>
-                <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">{t(p.descKey)}</p>
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{t(p.titleKey)}</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">{t(p.descKey)}</p>
               </div>
             );
           })}
