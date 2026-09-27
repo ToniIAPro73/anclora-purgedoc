@@ -1,6 +1,7 @@
 const translations = {
   es: {
     app_name: "Anclora Purgedoc",
+    logout: "Cerrar sesión",
     app_tagline: "Purga segura, privada y verificada de documentos PDF y DOCX",
     privacy_badge: "100% Procesamiento Local — Cero LLMs Externos",
     nav_privacy: "Privacidad por diseño",
@@ -232,6 +233,7 @@ const translations = {
   },
   en: {
     app_name: "Anclora Purgedoc",
+    logout: "Sign out",
     app_tagline: "Secure, private, and verified PDF & DOCX document redaction",
     privacy_badge: "100% Local Processing — Zero External LLMs",
     nav_privacy: "Privacy by Design",
