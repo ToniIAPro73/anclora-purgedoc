@@ -24,7 +24,7 @@ export function WorkspaceSidebar({ t, activeMode, sessionId, backendUrl, customR
         </button>
       </div>
       <nav aria-label="Navegación principal" className="space-y-1">
-        {items.map(({ id, icon: Icon, label, active, onClick }) => (
+        {items.map(({ id, icon: Icon, label, active, onClick, badge }) => (
           <button key={id} type="button" data-testid={`sidebar-${id}`} onClick={onClick} className={navClass(active)} title={collapsed ? label : undefined}>
             <Icon className="h-4 w-4 shrink-0" />
             {!collapsed && <span className="flex min-w-0 flex-1 items-center justify-between gap-2"><span className="truncate">{label}</span>{badge > 0 && <span className="rounded-full bg-cyan-500 px-1.5 py-0.5 text-[10px] font-bold text-slate-950">{badge}</span>}</span>}
