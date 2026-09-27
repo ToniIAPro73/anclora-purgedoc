@@ -71,10 +71,58 @@ Raw active sessions, batches, custom rulesets, upload bytes and the SSE event bu
 process memory (`backend/server.py`, `backend/services/sessions.py`,
 `backend/services/event_bus.py`). Only sanitized metadata is mirrored to PostgreSQL;
 raw state is lost on restart and is not shared across processes, so the backend remains
-effectively single-instance. Governed migrations apply only to the metadata schema:
+effectively single-instance. Governed migrations historically applied only to the
+metadata schema; see the scoped exception below for the closed-access auth schema.
 
-PRODUCTION_MIGRATIONS_ALLOWED=false
+PRODUCTION_MIGRATIONS_ALLOWED=true
 MIGRATION_SYSTEM=Alembic
+MIGRATION_CONFIRMATION_REQUIRED=true
+
+### Scoped migration authorization (active)
+
+`PRODUCTION_MIGRATIONS_ALLOWED` was flipped from `false` to `true` as a
+**scoped exception**, not a blanket standing permission. It authorizes
+exactly one thing:
+
+```text
+MIGRATION_AUTHORIZATION_SCOPE=identity_sub_only
+MIGRATION_AUTHORIZED_REVISIONS=0003_add_identity_sub
+MIGRATION_AUTHORIZATION_REASON=Additive, nullable, unique users.identity_sub column required by the Anclora Identity OIDC pilot (Wave 1); see docs/identity/ANCLORA_IDENTITY_WAVE1_CONTRACT.md in anclora-identity and docs/governance/proposal-enable-identity-sub-migration.md in this repository.
+MIGRATION_AUTHORIZATION_OWNER=Toni
+MIGRATION_AUTHORIZATION_DATE=2026-09-27
+MIGRATION_AUTHORIZATION_ROLLBACK_PROCEDURE=docs/deployment/migration-identity-sub-runbook.md, section 16 (alembic downgrade 0002_closed_access_auth)
+MIGRATION_AUTHORIZATION_REVIEW_CONDITION=Revisit this authorization once revision 0003_add_identity_sub has been applied to production and verified per the runbook; do not treat it as covering any later revision without a new, separately dated authorization entry below.
+```
+
+This authorization explicitly does **not**:
+
+- authorize destructive migrations (column drops, table drops, resets) of
+  any kind;
+- authorize a database reset of any kind;
+- authorize any Alembic revision other than `0003_add_identity_sub`;
+- activate `ANCLORA_IDENTITY_ENABLED` — that remains a fully separate flag,
+  set independently, and must stay `false` until after this migration is
+  applied and the existing login path is re-verified (see the runbook);
+- authorize any automatic deployment — `AUTO_PROMOTE=false` (below) is
+  unaffected by this entry;
+- extend `MIGRATION_CONFIRMATION_REQUIRED` away from `true` — every
+  execution against production, including this one, still requires Toni's
+  explicit per-run confirmation separate from this contract flag being
+  `true`. This repository previously declared no such field at all; it is
+  added here specifically because a blanket `PRODUCTION_MIGRATIONS_ALLOWED=true`
+  without a per-run gate would be insufficient control for an authentication
+  schema change.
+
+#### Migration authorization log
+
+| Date | Revision(s) authorized | Scope | Owner | Status |
+| --- | --- | --- | --- | --- |
+| 2026-09-27 | `0003_add_identity_sub` | Additive `users.identity_sub` column + unique index only | Toni | Authorized, not yet executed |
+
+Any future migration requires its own dated row in this table before
+`PRODUCTION_MIGRATIONS_ALLOWED=true` may be relied upon for it — this table,
+not the bare flag value, is the source of truth for what is actually
+authorized at any given time.
 
 ## Toolchain
 
@@ -189,9 +237,33 @@ QA_MINIMUM_FOR_RELEASE_PROMOTION=FULL
 
 
 QA_AUTH_MODEL=DEDICATED_USER
+QA_PERSISTENT_IDENTITY=qa2.purgedoc@anclora.local
+QA_REUSE=true
+QA_DELETE_AFTER_TEST=false
+QA_CREATE_IF_MISSING=true
+QA_CREATION_CONFIRMATION_REQUIRED=true
 QA_DATA=SYNTHETIC_FIXTURES_ONLY (`backend/fixtures_generator.py`)
 VISUAL_QA_EXECUTION=BY_QA_MODE
 REAL_DOCUMENTS_IN_TESTS=false
+
+### QA identity history
+
+`qa2.purgedoc@anclora.local` is the current, persistent, reusable QA identity
+(created 2026-09-27 via the documented whitelist CLI —
+`python backend/scripts/manage_whitelist.py add --email qa2.purgedoc@anclora.local`
+— per Toni's explicit authorization). It carries no admin privileges (not
+listed in `AUTH_ADMIN_EMAILS`) and must not be revoked or deleted after use;
+`QA_DELETE_AFTER_TEST=false` applies to this identity going forward, unlike
+what happened to its predecessor below.
+
+`qa.purgedoc@anclora.local` (created 2026-09-24) is **retired**: `disabled`
+at the `users` level and `revoked` at the `auth_whitelist` level, both
+untouched by this change. **Do not reactivate it via direct SQL** — this
+codebase has no supported application-level path to re-enable a disabled
+user (`POST /api/auth/activate` rejects any email with an existing `users`
+row regardless of status), so reinstating it would require bypassing
+application logic entirely. `qa2.purgedoc@anclora.local` replaces it as the
+identity to use going forward.
 
 CORRECTION (2026-09-27): this section previously read "no user accounts or
 authentication exist." That was accurate on 2026-09-23 when this file was
@@ -199,9 +271,11 @@ bootstrapped but became stale the next day: `backend/auth/*` (closed
 whitelist access, real `users`/`auth_whitelist`/`auth_audit_events` tables,
 Argon2id + JWT sessions) shipped in commit 56e541a (2026-09-24) and was never
 reflected back into this contract. See `docs/auth-access.md` for the actual,
-current auth model. `PRODUCTION_MIGRATIONS_ALLOWED=false` below still applies
-and is unaffected by this correction — it governs the closed-access auth
-schema too, not only the document-metadata mirror.
+current auth model. `PRODUCTION_MIGRATIONS_ALLOWED` above governs the
+closed-access auth schema too, not only the document-metadata mirror; as of
+2026-09-27 it is `true` under the scoped, single-revision authorization
+documented above (`identity_sub` only) — not a general reopening of
+migrations for this schema.
 
 ## Test requirements
 
