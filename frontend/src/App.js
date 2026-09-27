@@ -16,6 +16,7 @@ import { MetricCard } from "./components/dashboard/MetricCard";
 import { QuickActionCard } from "./components/dashboard/QuickActionCard";
 import { RecentActivityList } from "./components/dashboard/RecentActivityList";
 import { SecondaryPanel } from "./components/dashboard/SecondaryPanel";
+import { WorkspaceSidebar, MobileWorkspaceNav } from "./components/dashboard/WorkspaceSidebar";
 import {
   FileText,
   Layers,
@@ -124,6 +125,17 @@ function PurgedocMainApp() {
       setActiveMode("single");
       setBatchReviewingDocId(null);
     }
+  };
+
+  const handleNewDocument = () => {
+    setActiveMode("single");
+    setBatchReviewingDocId(null);
+    setCurrentStep("upload");
+    setSelectedFile(null);
+    setDocumentMeta(null);
+    setMatches([]);
+    setPurgeResult(null);
+    setErrorMessage(null);
   };
 
   // 1. Upload & Analyze Document (Single Mode)
@@ -339,19 +351,13 @@ function PurgedocMainApp() {
   return (
     <div className="min-h-screen flex flex-col bg-[#F8FAFC] text-slate-900 transition-colors dark:bg-[#0B0F19] dark:text-slate-100">
       
-      {/* Global Header with Mode Switcher & Rules Editor */}
-      <Header
-        onOpenDevFixtures={() => setIsDevFixturesOpen(true)}
-        onOpenRulesEditor={() => setIsRulesEditorOpen(true)}
-        customRulesCount={activeCustomRulesCount}
-        activeMode={activeMode}
-        onToggleMode={handleToggleMode}
-        sessionId={sessionId}
-        BACKEND_URL={BACKEND_URL}
-      />
+      <Header />
+      <MobileWorkspaceNav t={t} activeMode={activeMode} sessionId={sessionId} backendUrl={BACKEND_URL} onNewDocument={handleNewDocument} onToggleMode={handleToggleMode} onOpenRulesEditor={() => setIsRulesEditorOpen(true)} onOpenDevFixtures={() => setIsDevFixturesOpen(true)} />
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col">
+      <div className="flex min-h-0 flex-1">
+        <WorkspaceSidebar t={t} activeMode={activeMode} sessionId={sessionId} backendUrl={BACKEND_URL} customRulesCount={activeCustomRulesCount} onNewDocument={handleNewDocument} onToggleMode={handleToggleMode} onOpenRulesEditor={() => setIsRulesEditorOpen(true)} onOpenDevFixtures={() => setIsDevFixturesOpen(true)} />
+        <main className="flex min-w-0 flex-1 flex-col">
         {/* DASHBOARD HOME: overview + quick actions + workspace panel (single upload or batch queue) */}
         {currentStep === "upload" && (
           <div className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
@@ -607,7 +613,8 @@ function PurgedocMainApp() {
             onRestart={handleRestart}
           />
         )}
-      </main>
+        </main>
+      </div>
 
       {/* Confirmation Modal */}
       <ConfirmationModal

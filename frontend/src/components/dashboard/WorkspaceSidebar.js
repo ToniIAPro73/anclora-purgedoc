@@ -1,0 +1,48 @@
+import React, { useState } from "react";
+import axios from "axios";
+import { FileCode2, FileText, Layers, Menu, PanelLeftClose, PanelLeftOpen, Sliders } from "lucide-react";
+
+function navClass(active) {
+  return `group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition ${active ? "bg-cyan-500/10 text-cyan-700 ring-1 ring-cyan-500/20 dark:text-cyan-300" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/80 dark:hover:text-white"}`;
+}
+
+export function WorkspaceSidebar({ t, activeMode, sessionId, backendUrl, customRulesCount, onNewDocument, onToggleMode, onOpenRulesEditor, onOpenDevFixtures }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const items = [
+    { id: "dashboard", icon: FileText, label: t("dash_action_new_doc_title"), active: activeMode === "single", onClick: onNewDocument },
+    { id: "batch", icon: Layers, label: t("dash_action_batch_title"), active: activeMode === "batch", onClick: onToggleMode },
+    { id: "rules", icon: Sliders, label: t("dash_action_rules_title"), onClick: onOpenRulesEditor, badge: customRulesCount },
+    { id: "fixtures", icon: FileCode2, label: t("dash_action_fixtures_title"), onClick: onOpenDevFixtures },
+  ];
+
+  return (
+    <aside data-testid="workspace-sidebar" className={`hidden shrink-0 border-r border-slate-200/80 bg-white/70 px-3 py-4 transition-[width] duration-200 dark:border-slate-800/80 dark:bg-[#0B0F19]/70 md:block ${collapsed ? "w-[76px]" : "w-[248px]"}`}>
+      <div className="mb-5 flex items-center justify-between px-2">
+        {!collapsed && <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Workspace</span>}
+        <button type="button" aria-label={collapsed ? "Expandir navegación" : "Contraer navegación"} onClick={() => setCollapsed((value) => !value)} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-cyan-600 dark:hover:bg-slate-800 dark:hover:text-cyan-400">
+          {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+        </button>
+      </div>
+      <nav aria-label="Navegación principal" className="space-y-1">
+        {items.map(({ id, icon: Icon, label, active, onClick }) => (
+          <button key={id} type="button" data-testid={`sidebar-${id}`} onClick={onClick} className={navClass(active)} title={collapsed ? label : undefined}>
+            <Icon className="h-4 w-4 shrink-0" />
+            {!collapsed && <span className="flex min-w-0 flex-1 items-center justify-between gap-2"><span className="truncate">{label}</span>{badge > 0 && <span className="rounded-full bg-cyan-500 px-1.5 py-0.5 text-[10px] font-bold text-slate-950">{badge}</span>}</span>}
+          </button>
+        ))}
+      </nav>
+      {!collapsed && <div className="mt-8 space-y-3 rounded-xl border border-cyan-500/15 bg-cyan-500/5 p-3 text-xs leading-5 text-slate-500 dark:text-slate-400"><div><p className="font-semibold text-slate-700 dark:text-slate-200">{t("dash_status_local")}</p><p className="mt-1">{t("dash_status_failclosed")}</p></div>{sessionId && <><div className="flex items-center justify-between border-t border-cyan-500/10 pt-3"><span>{t("session_ttl_badge")}</span><span className="rounded bg-slate-900 px-1.5 py-0.5 font-mono text-[10px] text-slate-300 dark:bg-slate-800">TTL</span></div><button type="button" data-testid="delete-session-now-btn" onClick={async () => { if (!window.confirm("¿Eliminar todos los documentos, auditorías y sesiones de forma inmediata e irreversible?")) return; try { await axios.delete(`${backendUrl}/api/sessions/${sessionId}`); window.location.reload(); } catch (error) { console.error("Failed to delete session:", error); } }} className="w-full rounded-lg border border-red-500/20 px-2 py-2 text-left text-[11px] font-semibold text-red-600 transition hover:bg-red-500/10 dark:text-red-300">{t("session_delete_now_btn")}</button></>}</div>}
+    </aside>
+  );
+}
+
+export function MobileWorkspaceNav({ t, activeMode, sessionId, onNewDocument, onToggleMode, onOpenRulesEditor, onOpenDevFixtures }) {
+  const [open, setOpen] = useState(false);
+  const close = (callback) => { callback?.(); setOpen(false); };
+  return (
+    <div className="border-b border-slate-200/80 bg-white/80 px-4 py-2 dark:border-slate-800/80 dark:bg-[#0B0F19]/80 md:hidden">
+      <button type="button" onClick={() => setOpen((value) => !value)} className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300"><span>Workspace navigation</span>{open ? <PanelLeftClose className="h-4 w-4" /> : <Menu className="h-4 w-4" />}</button>
+      {open && <nav className="grid grid-cols-2 gap-2 pb-2 pt-2"><button type="button" onClick={() => close(onNewDocument)} className={`rounded-lg px-3 py-2 text-left text-xs font-semibold ${activeMode === "single" ? "bg-cyan-500/10 text-cyan-700 dark:text-cyan-300" : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"}`}>{t("dash_action_new_doc_title")}</button><button type="button" onClick={() => close(onToggleMode)} className={`rounded-lg px-3 py-2 text-left text-xs font-semibold ${activeMode === "batch" ? "bg-cyan-500/10 text-cyan-700 dark:text-cyan-300" : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"}`}>{t("dash_action_batch_title")}</button><button type="button" onClick={() => close(onOpenRulesEditor)} className="rounded-lg bg-slate-100 px-3 py-2 text-left text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">{t("dash_action_rules_title")}</button><button type="button" onClick={() => close(onOpenDevFixtures)} className="rounded-lg bg-slate-100 px-3 py-2 text-left text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">{t("dash_action_fixtures_title")}</button>{sessionId && <span className="col-span-2 rounded-lg border border-red-500/20 px-3 py-2 text-xs text-red-600 dark:text-red-300">{t("session_ttl_badge")}</span>}</nav>}
+    </div>
+  );
+}
