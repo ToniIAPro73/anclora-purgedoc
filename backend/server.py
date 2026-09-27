@@ -14,6 +14,8 @@ from pathlib import Path
 from fastapi import FastAPI, APIRouter, UploadFile, File, Form, HTTPException, Response, Request, Depends
 from sqlalchemy.orm import Session
 from backend.auth.routes import router as auth_router
+from backend.auth.oidc_routes import router as anclora_identity_router
+from backend.auth import oidc as anclora_identity_oidc
 from backend.auth.dependencies import (
     get_current_user_required,
     get_current_user_optional,
@@ -110,9 +112,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+if anclora_identity_oidc.ANCLORA_IDENTITY_ENABLED:
+    # Scoped strictly to the OIDC authorization-code round trip (state/nonce
+    # storage for Authlib's Starlette client) — this is not a general
+    # application session, does not carry auth state, and expires long before
+    # the actual access/refresh token cookies issued after a successful
+    # callback. Distinct cookie name so it can never be confused with them.
+    from starlette.middleware.sessions import SessionMiddleware
+
+    _oidc_session_secret = os.environ.get("ANCLORA_IDENTITY_SESSION_SECRET")
+    if not _oidc_session_secret:
+        raise RuntimeError("ANCLORA_IDENTITY_ENABLED=true requires ANCLORA_IDENTITY_SESSION_SECRET to be set")
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=_oidc_session_secret,
+        session_cookie="purgedoc_oidc_handshake",
+        max_age=600,
+        same_site="lax",
+        https_only=(APP_ENV == "production"),
+    )
+
 ENABLE_DEV_FIXTURES = os.environ.get("ENABLE_DEV_FIXTURES", "false").lower() in ("true", "1", "yes")
 
 api_router.include_router(auth_router)
+api_router.include_router(anclora_identity_router)
 
 # In-memory document session store for active custom rulesets
 _DOC_CUSTOM_RULESETS: Dict[str, Dict[str, Any]] = {}

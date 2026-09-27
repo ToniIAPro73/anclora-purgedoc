@@ -55,6 +55,13 @@ export default function Login() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Wave 1 pilot: Anclora Identity SSO, fail-closed behind a build-time flag.
+  // When unset, this renders nothing and the existing whitelist/password
+  // login is the only path — same as before this pilot.
+  const anclora_identity_enabled =
+    String(process.env.REACT_APP_ANCLORA_IDENTITY_ENABLED || "").toLowerCase() === "true";
+  const backend_url = process.env.REACT_APP_BACKEND_URL || "";
+
   // If already authenticated, redirect to workspace
   if (!loading && user) {
     return <Navigate to="/app" replace />;
@@ -177,6 +184,17 @@ export default function Login() {
                 {en ? "Or continue with" : "O continuar con"}
               </span>
             </div>
+
+            {anclora_identity_enabled && (
+              <a
+                href={`${backend_url}/api/auth/anclora-identity/login`}
+                data-testid="anclora-identity-login-link"
+                className="flex items-center justify-center gap-2 h-[42px] rounded-[10px] border border-[#38BDF8]/60 bg-[#38BDF8]/10 text-[#38BDF8] text-xs font-medium hover:bg-[#38BDF8]/20"
+              >
+                <ShieldCheck size={15} />
+                <span>{en ? "Continue with Anclora Identity" : "Continuar con Anclora Identity"}</span>
+              </a>
+            )}
 
             <div className="grid grid-cols-2 gap-2">
               <button

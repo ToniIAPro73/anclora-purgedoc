@@ -188,10 +188,20 @@ QA_MINIMUM_FOR_DATABASE_MIGRATION=FULL
 QA_MINIMUM_FOR_RELEASE_PROMOTION=FULL
 
 
-QA_AUTH_MODEL=NONE (no user accounts or authentication exist)
+QA_AUTH_MODEL=DEDICATED_USER
 QA_DATA=SYNTHETIC_FIXTURES_ONLY (`backend/fixtures_generator.py`)
 VISUAL_QA_EXECUTION=BY_QA_MODE
 REAL_DOCUMENTS_IN_TESTS=false
+
+CORRECTION (2026-09-27): this section previously read "no user accounts or
+authentication exist." That was accurate on 2026-09-23 when this file was
+bootstrapped but became stale the next day: `backend/auth/*` (closed
+whitelist access, real `users`/`auth_whitelist`/`auth_audit_events` tables,
+Argon2id + JWT sessions) shipped in commit 56e541a (2026-09-24) and was never
+reflected back into this contract. See `docs/auth-access.md` for the actual,
+current auth model. `PRODUCTION_MIGRATIONS_ALLOWED=false` below still applies
+and is unaffected by this correction — it governs the closed-access auth
+schema too, not only the document-metadata mirror.
 
 ## Test requirements
 
