@@ -21,11 +21,9 @@ import {
   FileText,
   Layers,
   Sliders,
-  FileCode2,
   Radio,
   Clock,
   ShieldCheck,
-  Lock,
   ArrowLeft
 } from "lucide-react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
@@ -76,6 +74,7 @@ function PurgedocMainApp() {
     }
   });
   const initialCustomRulesRef = useRef(customRules);
+  const historyRef = useRef(null);
 
   const activeCustomRulesCount = customRules.filter((r) => r.enabled).length;
 
@@ -136,6 +135,23 @@ function PurgedocMainApp() {
     setMatches([]);
     setPurgeResult(null);
     setErrorMessage(null);
+  };
+
+  // "Dashboard" nav: return to the overview without discarding in-progress work
+  // (unlike "New document", which is an explicit full reset).
+  const handleGoDashboard = () => {
+    setBatchReviewingDocId(null);
+    setCurrentStep("upload");
+  };
+
+  // "History" nav / quick action: land on the dashboard and bring the
+  // recent-activity section into view instead of duplicating it elsewhere.
+  const handleOpenHistory = () => {
+    setBatchReviewingDocId(null);
+    setCurrentStep("upload");
+    window.setTimeout(() => {
+      historyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
   };
 
   // 1. Upload & Analyze Document (Single Mode)
@@ -352,11 +368,11 @@ function PurgedocMainApp() {
     <div className="min-h-screen flex flex-col bg-[#F8FAFC] text-slate-900 transition-colors dark:bg-[#0B0F19] dark:text-slate-100">
       
       <Header />
-      <MobileWorkspaceNav t={t} activeMode={activeMode} sessionId={sessionId} backendUrl={BACKEND_URL} onNewDocument={handleNewDocument} onToggleMode={handleToggleMode} onOpenRulesEditor={() => setIsRulesEditorOpen(true)} onOpenDevFixtures={() => setIsDevFixturesOpen(true)} />
+      <MobileWorkspaceNav t={t} activeMode={activeMode} currentStep={currentStep} sessionId={sessionId} onGoDashboard={handleGoDashboard} onNewDocument={handleNewDocument} onToggleMode={handleToggleMode} onOpenRulesEditor={() => setIsRulesEditorOpen(true)} onOpenHistory={handleOpenHistory} onOpenDevFixtures={() => setIsDevFixturesOpen(true)} />
 
       {/* Main Content Area */}
       <div className="flex min-h-0 flex-1">
-        <WorkspaceSidebar t={t} activeMode={activeMode} sessionId={sessionId} backendUrl={BACKEND_URL} customRulesCount={activeCustomRulesCount} onNewDocument={handleNewDocument} onToggleMode={handleToggleMode} onOpenRulesEditor={() => setIsRulesEditorOpen(true)} onOpenDevFixtures={() => setIsDevFixturesOpen(true)} />
+        <WorkspaceSidebar t={t} activeMode={activeMode} currentStep={currentStep} sessionId={sessionId} backendUrl={BACKEND_URL} customRulesCount={activeCustomRulesCount} onGoDashboard={handleGoDashboard} onNewDocument={handleNewDocument} onToggleMode={handleToggleMode} onOpenRulesEditor={() => setIsRulesEditorOpen(true)} onOpenHistory={handleOpenHistory} onOpenDevFixtures={() => setIsDevFixturesOpen(true)} />
         <main className="flex min-w-0 flex-1 flex-col">
         {/* DASHBOARD HOME: overview + quick actions + workspace panel (single upload or batch queue) */}
         {currentStep === "upload" && (
@@ -367,32 +383,30 @@ function PurgedocMainApp() {
               statusLabels={[t("dash_status_local"), t("dash_status_failclosed")]}
             />
 
-            {/* Overview row: real, already-available state only */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Condensed operational summary: ONE block, not competing cards */}
+            <div
+              data-testid="dash-summary-strip"
+              className="flex flex-wrap divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white shadow-sm dark:divide-slate-800 dark:border-slate-800 dark:bg-[#111827]/70 sm:divide-x sm:divide-y-0"
+            >
               <MetricCard
+                variant="row"
                 testId="metric-session"
                 icon={Radio}
                 label={t("dash_metric_session")}
                 value={sessionId ? t("rule_status_active") : "—"}
-                sublabel={t("dash_metric_session_sub")}
                 tone={sessionId ? "success" : "neutral"}
               />
               <MetricCard
+                variant="row"
                 testId="metric-batch-docs"
                 icon={Layers}
                 label={t("dash_metric_batch_docs")}
                 value={currentBatchDocs.length}
-                sublabel={t("dash_metric_batch_docs_sub")}
-              />
-              <MetricCard
-                testId="metric-pending-review"
-                icon={Clock}
-                label={t("dash_metric_pending_review")}
-                value={pendingCount}
-                sublabel={t("dash_metric_pending_review_sub")}
+                sublabel={pendingCount > 0 ? `· ${pendingCount} ${t("dash_metric_pending_review")}` : undefined}
                 tone={pendingCount > 0 ? "warning" : "neutral"}
               />
               <MetricCard
+                variant="row"
                 testId="metric-last-verification"
                 icon={ShieldCheck}
                 label={t("dash_metric_last_verification")}
@@ -407,22 +421,24 @@ function PurgedocMainApp() {
               />
             </div>
 
-            {/* Quick actions: wired to existing handlers/state transitions only */}
+            {/* Primary action: unmistakable, dominates the page */}
+            <QuickActionCard
+              variant="primary"
+              testId="quick-action-new-doc"
+              icon={FileText}
+              title={t("dash_action_new_doc_title")}
+              description={t("dash_action_new_doc_desc")}
+              onClick={() => {
+                if (activeMode !== "single") handleToggleMode();
+              }}
+            />
+
+            {/* Secondary actions: clearly subordinate to the primary CTA above */}
             <div>
               <h2 className="text-xs font-mono uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
-                {t("dash_quick_actions_title")}
+                {t("dash_secondary_actions_title")}
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <QuickActionCard
-                  testId="quick-action-new-doc"
-                  icon={FileText}
-                  title={t("dash_action_new_doc_title")}
-                  description={t("dash_action_new_doc_desc")}
-                  active={activeMode === "single"}
-                  onClick={() => {
-                    if (activeMode !== "single") handleToggleMode();
-                  }}
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <QuickActionCard
                   testId="quick-action-batch"
                   icon={Layers}
@@ -442,11 +458,11 @@ function PurgedocMainApp() {
                   onClick={() => setIsRulesEditorOpen(true)}
                 />
                 <QuickActionCard
-                  testId="quick-action-fixtures"
-                  icon={FileCode2}
-                  title={t("dash_action_fixtures_title")}
-                  description={t("dash_action_fixtures_desc")}
-                  onClick={() => setIsDevFixturesOpen(true)}
+                  testId="quick-action-history"
+                  icon={Clock}
+                  title={t("dash_nav_history")}
+                  description={t("dash_recent_activity_title")}
+                  onClick={handleOpenHistory}
                 />
               </div>
             </div>
@@ -486,33 +502,25 @@ function PurgedocMainApp() {
               </div>
 
               <div className="lg:col-span-4 space-y-4">
-                <RecentActivityList
-                  documents={currentBatchDocs}
-                  title={t("dash_recent_activity_title")}
-                  emptyLabel={t("dash_recent_activity_empty")}
-                  onSelectDocument={activeMode === "batch" ? handleSelectBatchDocumentForReview : undefined}
-                />
+                <div ref={historyRef}>
+                  <RecentActivityList
+                    documents={currentBatchDocs}
+                    title={t("dash_recent_activity_title")}
+                    emptyLabel={t("dash_recent_activity_empty")}
+                    onSelectDocument={activeMode === "batch" ? handleSelectBatchDocumentForReview : undefined}
+                  />
+                </div>
 
-                <SecondaryPanel icon={ShieldCheck} title={t("dash_secondary_profiles_title")} testId="secondary-profiles">
-                  <div className="flex flex-wrap gap-1.5">
-                    <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-cyan-700 dark:text-cyan-300 border border-slate-200 dark:border-slate-700">
-                      RRHH
-                    </span>
-                    <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-cyan-700 dark:text-cyan-300 border border-slate-200 dark:border-slate-700">
-                      LEGAL
-                    </span>
-                    <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-cyan-700 dark:text-cyan-300 border border-slate-200 dark:border-slate-700">
-                      DEVOPS
-                    </span>
-                  </div>
-                </SecondaryPanel>
-
-                <SecondaryPanel icon={Lock} title={t("dash_secondary_security_title")} testId="secondary-security">
-                  {t("dash_secondary_security_body")}
-                </SecondaryPanel>
-
-                <SecondaryPanel icon={Clock} title={t("dash_secondary_retention_title")} testId="secondary-retention">
-                  {t("dash_secondary_retention_body")}
+                {/* Trust/security info condensed into ONE disclosure block */}
+                <SecondaryPanel
+                  collapsible
+                  icon={ShieldCheck}
+                  title={t("dash_trust_title")}
+                  summary={t("dash_trust_summary")}
+                  testId="secondary-trust"
+                >
+                  <p>{t("dash_secondary_security_body")}</p>
+                  <p>{t("dash_secondary_retention_body")}</p>
                 </SecondaryPanel>
               </div>
             </div>

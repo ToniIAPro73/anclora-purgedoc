@@ -8,11 +8,38 @@ const TONE_STYLES = {
 };
 
 /**
- * Small stat/metric tile for the overview row. Only render this with real,
- * already-available state — never a fabricated number.
+ * Small stat/metric tile. Only render this with real, already-available
+ * state — never a fabricated number.
+ *
+ * variant="card" (default): isolated bordered tile, for standalone use.
+ * variant="row": compact inline stat with no border/shadow of its own,
+ *   meant to sit inside a single shared container (e.g. the dashboard's
+ *   condensed operational summary bar) so several stats read as ONE block
+ *   instead of competing cards.
  */
-export const MetricCard = ({ icon: Icon, label, value, sublabel, tone = "neutral", testId }) => {
+export const MetricCard = ({ icon: Icon, label, value, sublabel, tone = "neutral", testId, variant = "card" }) => {
   const toneClass = TONE_STYLES[tone] || TONE_STYLES.neutral;
+
+  if (variant === "row") {
+    return (
+      <div data-testid={testId} className="flex items-center gap-2.5 px-4 py-2.5 first:pl-0 last:pr-0">
+        {Icon && (
+          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${toneClass}`}>
+            <Icon className="h-3.5 w-3.5" />
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className="text-[10px] font-mono uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            {label}
+          </p>
+          <p className="truncate text-sm font-bold text-slate-900 dark:text-white">
+            {value}
+            {sublabel && <span className="ml-1 text-xs font-normal text-slate-500 dark:text-slate-500">{sublabel}</span>}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

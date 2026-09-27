@@ -220,7 +220,7 @@ const translations = {
     dash_action_batch_desc: "Gestiona una cola de varios documentos con SSE en vivo.",
     dash_action_rules_title: "Reglas personalizadas",
     dash_action_rules_desc: "Define patrones regex propios por perfil.",
-    dash_action_fixtures_title: "Historial / fixtures QA",
+    dash_action_fixtures_title: "Fixtures QA",
     dash_action_fixtures_desc: "Carga documentos sintéticos para validar el flujo.",
     dash_recent_activity_title: "Actividad reciente del lote",
     dash_recent_activity_empty: "Todavía no hay documentos en el lote de trabajo actual.",
@@ -230,6 +230,14 @@ const translations = {
     dash_secondary_security_body: "Todo el análisis y la redacción ocurren en memoria local del servidor. Ningún documento ni fragmento de texto se envía a LLMs externos ni APIs de terceros.",
     dash_secondary_retention_title: "Retención y auto-eliminación",
     dash_secondary_retention_body: "Sesiones, documentos fuente y artefactos de auditoría se eliminan automáticamente al expirar su TTL, o de inmediato con el botón de eliminación manual.",
+    dash_nav_dashboard: "Panel",
+    dash_nav_history: "Historial",
+    dash_nav_settings: "Sesión y ajustes",
+    dash_nav_dev_tools: "Herramientas de desarrollo",
+    dash_dev_tools_link: "Cargar fixtures QA",
+    dash_secondary_actions_title: "Más acciones",
+    dash_trust_title: "Procesamiento local y verificación",
+    dash_trust_summary: "Todo ocurre en memoria local; la sesión se auto-elimina por TTL.",
   },
   en: {
     app_name: "Anclora Purgedoc",
@@ -451,7 +459,7 @@ const translations = {
     dash_action_batch_desc: "Manage a multi-document queue with live SSE progress.",
     dash_action_rules_title: "Custom rules",
     dash_action_rules_desc: "Define your own regex patterns per profile.",
-    dash_action_fixtures_title: "History / QA fixtures",
+    dash_action_fixtures_title: "QA fixtures",
     dash_action_fixtures_desc: "Load synthetic documents to validate the flow.",
     dash_recent_activity_title: "Recent batch activity",
     dash_recent_activity_empty: "No documents in the current working batch yet.",
@@ -460,7 +468,15 @@ const translations = {
     dash_secondary_security_title: "Security & processing",
     dash_secondary_security_body: "All analysis and redaction happen in local server memory. No document or text fragment is ever sent to external LLMs or third-party APIs.",
     dash_secondary_retention_title: "Retention & auto-deletion",
-    dash_secondary_retention_body: "Sessions, source documents, and audit artifacts are automatically deleted when their TTL expires, or immediately via the manual delete button."
+    dash_secondary_retention_body: "Sessions, source documents, and audit artifacts are automatically deleted when their TTL expires, or immediately via the manual delete button.",
+    dash_nav_dashboard: "Dashboard",
+    dash_nav_history: "History",
+    dash_nav_settings: "Session & settings",
+    dash_nav_dev_tools: "Developer tools",
+    dash_dev_tools_link: "Load QA fixtures",
+    dash_secondary_actions_title: "More actions",
+    dash_trust_title: "Local processing & verification",
+    dash_trust_summary: "Everything happens in local memory; the session auto-deletes on TTL."
   }
 };
 
