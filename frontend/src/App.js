@@ -11,6 +11,22 @@ import { ReviewPanel } from "./components/ReviewPanel";
 import { ConfirmationModal } from "./components/ConfirmationModal";
 import { ResultsScreen } from "./components/ResultsScreen";
 import { CustomRulesetEditor } from "./components/CustomRulesetEditor";
+import { PageHeader } from "./components/dashboard/PageHeader";
+import { MetricCard } from "./components/dashboard/MetricCard";
+import { QuickActionCard } from "./components/dashboard/QuickActionCard";
+import { RecentActivityList } from "./components/dashboard/RecentActivityList";
+import { SecondaryPanel } from "./components/dashboard/SecondaryPanel";
+import {
+  FileText,
+  Layers,
+  Sliders,
+  FileCode2,
+  Radio,
+  Clock,
+  ShieldCheck,
+  Lock,
+  ArrowLeft
+} from "lucide-react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -321,7 +337,7 @@ function PurgedocMainApp() {
   const pendingCount = matches.filter((m) => m.status === "pending").length;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0B0F19] text-slate-100 transition-colors dark:bg-[#0B0F19] dark:text-slate-100 light:bg-[#F8FAFC] light:text-slate-900">
+    <div className="min-h-screen flex flex-col bg-[#F8FAFC] text-slate-900 transition-colors dark:bg-[#0B0F19] dark:text-slate-100">
       
       {/* Global Header with Mode Switcher & Rules Editor */}
       <Header
@@ -336,32 +352,165 @@ function PurgedocMainApp() {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col">
-        {/* BATCH MODE VIEW */}
-        {activeMode === "batch" && !batchReviewingDocId && (
-          <BatchQueueScreen
-            backendUrl={BACKEND_URL}
-            sessionId={sessionId}
-            batchId={batchId}
-            batchDetails={batchDetails}
-            onRefreshBatch={refreshBatch}
-            onSelectDocumentForReview={handleSelectBatchDocumentForReview}
-            customRules={customRules}
-            onOpenRulesEditor={() => setIsRulesEditorOpen(true)}
-          />
-        )}
+        {/* DASHBOARD HOME: overview + quick actions + workspace panel (single upload or batch queue) */}
+        {currentStep === "upload" && (
+          <div className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+            <PageHeader
+              title={t("dash_page_title")}
+              subtitle={t("dash_page_subtitle")}
+              statusLabels={[t("dash_status_local"), t("dash_status_failclosed")]}
+            />
 
-        {/* SINGLE MODE OR BATCH REVIEW STEP: UPLOAD */}
-        {activeMode === "single" && currentStep === "upload" && (
-          <UploadScreen
-            selectedFile={selectedFile}
-            setSelectedFile={setSelectedFile}
-            selectedProfile={selectedProfile}
-            setSelectedProfile={setSelectedProfile}
-            onStartAnalysis={handleStartAnalysis}
-            errorMessage={errorMessage}
-            customRulesCount={activeCustomRulesCount}
-            onOpenRulesEditor={() => setIsRulesEditorOpen(true)}
-          />
+            {/* Overview row: real, already-available state only */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <MetricCard
+                testId="metric-session"
+                icon={Radio}
+                label={t("dash_metric_session")}
+                value={sessionId ? t("rule_status_active") : "—"}
+                sublabel={t("dash_metric_session_sub")}
+                tone={sessionId ? "success" : "neutral"}
+              />
+              <MetricCard
+                testId="metric-batch-docs"
+                icon={Layers}
+                label={t("dash_metric_batch_docs")}
+                value={currentBatchDocs.length}
+                sublabel={t("dash_metric_batch_docs_sub")}
+              />
+              <MetricCard
+                testId="metric-pending-review"
+                icon={Clock}
+                label={t("dash_metric_pending_review")}
+                value={pendingCount}
+                sublabel={t("dash_metric_pending_review_sub")}
+                tone={pendingCount > 0 ? "warning" : "neutral"}
+              />
+              <MetricCard
+                testId="metric-last-verification"
+                icon={ShieldCheck}
+                label={t("dash_metric_last_verification")}
+                value={
+                  purgeResult
+                    ? (purgeResult.verification_passed
+                        ? t("dash_metric_verification_pass")
+                        : t("dash_metric_verification_fail"))
+                    : t("dash_metric_verification_none")
+                }
+                tone={purgeResult ? (purgeResult.verification_passed ? "success" : "danger") : "neutral"}
+              />
+            </div>
+
+            {/* Quick actions: wired to existing handlers/state transitions only */}
+            <div>
+              <h2 className="text-xs font-mono uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                {t("dash_quick_actions_title")}
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <QuickActionCard
+                  testId="quick-action-new-doc"
+                  icon={FileText}
+                  title={t("dash_action_new_doc_title")}
+                  description={t("dash_action_new_doc_desc")}
+                  active={activeMode === "single"}
+                  onClick={() => {
+                    if (activeMode !== "single") handleToggleMode();
+                  }}
+                />
+                <QuickActionCard
+                  testId="quick-action-batch"
+                  icon={Layers}
+                  title={t("dash_action_batch_title")}
+                  description={t("dash_action_batch_desc")}
+                  active={activeMode === "batch"}
+                  onClick={() => {
+                    if (activeMode !== "batch") handleToggleMode();
+                  }}
+                />
+                <QuickActionCard
+                  testId="quick-action-rules"
+                  icon={Sliders}
+                  title={t("dash_action_rules_title")}
+                  description={t("dash_action_rules_desc")}
+                  badge={activeCustomRulesCount}
+                  onClick={() => setIsRulesEditorOpen(true)}
+                />
+                <QuickActionCard
+                  testId="quick-action-fixtures"
+                  icon={FileCode2}
+                  title={t("dash_action_fixtures_title")}
+                  description={t("dash_action_fixtures_desc")}
+                  onClick={() => setIsDevFixturesOpen(true)}
+                />
+              </div>
+            </div>
+
+            {/* Main workspace (shrunk, coexists with overview/quick actions above) + secondary column */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="lg:col-span-8 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#0B0F19]/40 p-3 sm:p-4">
+                <h2 className="px-1 text-xs font-mono uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  {t("dash_workspace_title")}
+                </h2>
+
+                {activeMode === "batch" && !batchReviewingDocId && (
+                  <BatchQueueScreen
+                    backendUrl={BACKEND_URL}
+                    sessionId={sessionId}
+                    batchId={batchId}
+                    batchDetails={batchDetails}
+                    onRefreshBatch={refreshBatch}
+                    onSelectDocumentForReview={handleSelectBatchDocumentForReview}
+                    customRules={customRules}
+                    onOpenRulesEditor={() => setIsRulesEditorOpen(true)}
+                  />
+                )}
+
+                {activeMode === "single" && (
+                  <UploadScreen
+                    selectedFile={selectedFile}
+                    setSelectedFile={setSelectedFile}
+                    selectedProfile={selectedProfile}
+                    setSelectedProfile={setSelectedProfile}
+                    onStartAnalysis={handleStartAnalysis}
+                    errorMessage={errorMessage}
+                    customRulesCount={activeCustomRulesCount}
+                    onOpenRulesEditor={() => setIsRulesEditorOpen(true)}
+                  />
+                )}
+              </div>
+
+              <div className="lg:col-span-4 space-y-4">
+                <RecentActivityList
+                  documents={currentBatchDocs}
+                  title={t("dash_recent_activity_title")}
+                  emptyLabel={t("dash_recent_activity_empty")}
+                  onSelectDocument={activeMode === "batch" ? handleSelectBatchDocumentForReview : undefined}
+                />
+
+                <SecondaryPanel icon={ShieldCheck} title={t("dash_secondary_profiles_title")} testId="secondary-profiles">
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-cyan-700 dark:text-cyan-300 border border-slate-200 dark:border-slate-700">
+                      RRHH
+                    </span>
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-cyan-700 dark:text-cyan-300 border border-slate-200 dark:border-slate-700">
+                      LEGAL
+                    </span>
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-cyan-700 dark:text-cyan-300 border border-slate-200 dark:border-slate-700">
+                      DEVOPS
+                    </span>
+                  </div>
+                </SecondaryPanel>
+
+                <SecondaryPanel icon={Lock} title={t("dash_secondary_security_title")} testId="secondary-security">
+                  {t("dash_secondary_security_body")}
+                </SecondaryPanel>
+
+                <SecondaryPanel icon={Clock} title={t("dash_secondary_retention_title")} testId="secondary-retention">
+                  {t("dash_secondary_retention_body")}
+                </SecondaryPanel>
+              </div>
+            </div>
+          </div>
         )}
 
         {currentStep === "analyzing" && (

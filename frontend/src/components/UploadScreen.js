@@ -61,22 +61,22 @@ export const UploadScreen = ({
   };
 
   return (
-    <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6">
-      
-      {/* Title & Value Proposition */}
-      <div className="text-center mb-8">
-        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white dark:text-white light:text-slate-900">
+    <div className="w-full py-4 px-1 sm:px-2">
+
+      {/* Compact title (workspace panel heading, not a page hero) */}
+      <div className="mb-4">
+        <h2 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white">
           {t("upload_title")}
-        </h1>
-        <p className="mt-2 text-sm sm:text-base text-slate-400 max-w-2xl mx-auto">
+        </h2>
+        <p className="mt-1 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
           {t("upload_subtitle")}
         </p>
       </div>
 
       {/* Error Banner if any */}
       {errorMessage && (
-        <div className="mb-6 p-4 rounded-xl bg-red-950/60 border border-red-800 text-red-200 text-sm flex items-start gap-3 animate-in fade-in">
-          <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+        <div className="mb-4 p-3 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-200 text-sm flex items-start gap-3 animate-in fade-in">
+          <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400 shrink-0 mt-0.5" />
           <div>
             <strong className="font-semibold">Error de validación:</strong> {errorMessage}
           </div>
@@ -89,7 +89,7 @@ export const UploadScreen = ({
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
-        className={`relative border-2 border-dashed rounded-2xl p-8 sm:p-12 text-center cursor-pointer transition-all ${
+        className={`relative border-2 border-dashed rounded-2xl p-6 sm:p-8 text-center cursor-pointer transition-all ${
           selectedFile
             ? "border-cyan-500 bg-cyan-950/20"
             : "border-slate-700 hover:border-cyan-500/60 bg-[#111827]/70 hover:bg-[#111827]"
@@ -193,17 +193,17 @@ export const UploadScreen = ({
         </div>
       </div>
 
-      {/* CTA Button */}
-      <div className="mt-8 flex justify-center">
+      {/* CTA Button — compact, not full-width */}
+      <div className="mt-6 flex justify-end">
         <button
           type="button"
           data-testid="process-document-btn"
           disabled={!selectedFile}
           onClick={onStartAnalysis}
-          className={`px-8 py-3.5 rounded-full font-semibold text-sm transition-all shadow-md flex items-center gap-2 ${
+          className={`px-5 py-2.5 rounded-full font-semibold text-sm transition-all shadow-sm flex items-center gap-2 ${
             selectedFile
-              ? "bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white shadow-[0_0_20px_rgba(56,189,248,0.3)] hover:scale-[1.01]"
-              : "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700"
+              ? "bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white hover:scale-[1.01]"
+              : "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300 dark:bg-slate-800 dark:text-slate-500 dark:border-slate-700"
           }`}
         >
           <Sparkles className="w-4 h-4" />
