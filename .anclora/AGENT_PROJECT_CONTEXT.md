@@ -97,8 +97,7 @@ AUTO_PROMOTE=false
 - Never force-push to any branch.
 - Never commit functional changes directly to `staging`, `production` or `main`.
 - A normal task ends with, at most: validation → commit → `git push origin development` → STOP.
-- Never promote without an explicit instruction from Toni. Promotion only happens through
-  `.github/workflows/promote.yml` (manual, fast-forward only, requires green CI on the exact source SHA).
+- Do not promote automatically. An explicit current-task instruction from Toni may authorize promotion through `.github/workflows/promote.yml` (manual, fast-forward only, requires green CI on the exact source SHA); a prior mission-scoped `No promotion` rule does not persist.
 
 ## Non-negotiable invariants
 

@@ -297,6 +297,13 @@ DEFAULT_BRANCH=development
 FEATURE_BRANCHES=DISALLOWED
 PROMOTION_FLOW=development->staging->production->main
 AUTO_PROMOTE=false
+EXPLICIT_PROMOTION_ALLOWED=true
+PROMOTION_AUTHORIZATION_SCOPE=CURRENT_TASK_OR_CONVERSATION
+PROMOTION_REQUIRES_PRE_STEP_GATES=true
+PROMOTION_STOP_ON_GATE_FAILURE=true
+PROMOTION_FORCE_PUSH_ALLOWED=false
+PROMOTION_OLD_AUTHORIZATION_PERSISTS=false
 
-Work is committed and pushed to `development` only. `staging`, `production` and `main` move
-exclusively through `.github/workflows/promote.yml` on Toni's explicit instruction.
+Work is committed and pushed to `development` by default. `staging`, `production` and `main`
+move exclusively through `.github/workflows/promote.yml` on Toni's explicit current-task
+instruction, subject to all release gates.
