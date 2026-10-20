@@ -1,23 +1,19 @@
-# Checklist de validación — carrera en los tests HTTP del backend
+# Checklist de validación — invariantes de promoción global
 
-**Alcance:** el job `Backend tests` fallaba de forma intermitente en `HTTP tests against local backend` con `Failed to authenticate test session: 500`. El log del servidor (paso añadido en `8326924`) muestra `ResponseValidationError … IndexError: tuple index out of range` en `POST /api/auth/login`: con `-n 2` (xdist) dos workers reescriben la fila del usuario QA en el SQLite compartido mientras el servidor la lee. Se ejecutan esos tests HTTP en serie con `-n 0`, la opción que documenta `backend/pytest.ini`; `addopts` no se modifica.
+**Alcance:** propagar con `anclora-mods/scripts/adopt-repo.mjs` las invariantes nuevas de la política global de promoción a `.anclora/PRODUCTION_RUNTIME.md`: espera solo a que termine el workflow de cada salto, verificación de cada rama a cargo de Toni, alcance multi-repo y resumen único al final. Solo se añaden 6 líneas de contrato; no cambia código ni comportamiento de la aplicación.
 
 ## Comprobaciones ejecutadas
 
 | Comprobación | Resultado |
 | --- | --- |
-| Causa raíz en el log del servidor de CI | `IndexError` al serializar `UserRow` en el login |
-| Reproducción local con entorno de CI y `-n 2` | PASS — la carrera es intermitente |
-| Integridad del diff | `git diff --check` |
-
-## Verificación de GitHub
-
-Pendiente: el job `Backend tests` debe quedar en verde en el siguiente run de `development`.
+| `node scripts/adopt-repo.mjs apply --repo <repo>` | APPLIED |
+| Diff limitado a `.anclora/PRODUCTION_RUNTIME.md` | 6 inserciones, sin borrados |
+| Tests del adopter (`adopt-repo.test.mjs`) | PASS — 38 tests |
 
 ## Verificación visual
 
-No aplica: solo workflow de CI.
+No aplica: solo contrato de documentación.
 
 ## Promoción
 
-No solicitada hasta que el CI esté en verde.
+No solicitada en este cambio.
