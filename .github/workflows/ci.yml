@@ -118,3 +118,7 @@ jobs:
             backend/tests/test_api_e2e.py \
             backend/tests/test_encrypted_ruleset_http.py \
             backend/tests/security/test_sensitive_log_leakage.py
+
+      - name: Backend server log (on failure)
+        if: failure()
+        run: cat "$RUNNER_TEMP/uvicorn.log" || true
