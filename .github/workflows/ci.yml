@@ -114,7 +114,7 @@ jobs:
             cat "$RUNNER_TEMP/uvicorn.log"
             exit 1
           fi
-          python -m pytest -q \
+          python -m pytest -q -n 0 \
             backend/tests/test_api_e2e.py \
             backend/tests/test_encrypted_ruleset_http.py \
             backend/tests/security/test_sensitive_log_leakage.py

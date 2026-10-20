@@ -1,18 +1,18 @@
-# Checklist de validación — diagnóstico del job Backend tests
+# Checklist de validación — carrera en los tests HTTP del backend
 
-**Alcance:** el job `Backend tests` falla en `HTTP tests against local backend` con `Failed to authenticate test session: 500` sobre el commit `fb48313` (solo cambia un `.md`). El mismo código pasa al relanzar el CI de `47f56bb` y pasa en local con el entorno de CI. Se añade un paso `if: failure()` que imprime `uvicorn.log` para ver la causa real del 500.
+**Alcance:** el job `Backend tests` fallaba de forma intermitente en `HTTP tests against local backend` con `Failed to authenticate test session: 500`. El log del servidor (paso añadido en `8326924`) muestra `ResponseValidationError … IndexError: tuple index out of range` en `POST /api/auth/login`: con `-n 2` (xdist) dos workers reescriben la fila del usuario QA en el SQLite compartido mientras el servidor la lee. Se ejecutan esos tests HTTP en serie con `-n 0`, la opción que documenta `backend/pytest.ini`; `addopts` no se modifica.
 
 ## Comprobaciones ejecutadas
 
 | Comprobación | Resultado |
 | --- | --- |
-| Reproducción local con entorno de CI (tests deterministas + HTTP e2e) | PASS — 103 y 8 tests |
-| Rerun de CI en `47f56bb` | PASS |
-| Rerun de CI en `fb48313` (2 intentos) | FAIL |
+| Causa raíz en el log del servidor de CI | `IndexError` al serializar `UserRow` en el login |
+| Reproducción local con entorno de CI y `-n 2` | PASS — la carrera es intermitente |
+| Integridad del diff | `git diff --check` |
 
 ## Verificación de GitHub
 
-Pendiente: leer el log del servidor en el siguiente run de `development`.
+Pendiente: el job `Backend tests` debe quedar en verde en el siguiente run de `development`.
 
 ## Verificación visual
 
@@ -20,4 +20,4 @@ No aplica: solo workflow de CI.
 
 ## Promoción
 
-No solicitada.
+No solicitada hasta que el CI esté en verde.
