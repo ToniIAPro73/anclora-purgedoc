@@ -96,8 +96,8 @@ AUTO_PROMOTE=false
 - Do NOT create `feat/*`, `fix/*`, `refactor/*` or any temporary branch unless Toni explicitly orders it.
 - Never force-push to any branch.
 - Never commit functional changes directly to `staging`, `production` or `main`.
-- A normal task ends with, at most: validation → commit → `git push origin development` → STOP.
-- Do not promote automatically. An explicit current-task instruction from Toni may authorize promotion through `.github/workflows/promote.yml` (manual, fast-forward only, requires green CI on the exact source SHA); a prior mission-scoped `No promotion` rule does not persist.
+- A normal task ends by presenting the validated change in development and waiting for Toni's explicit validation. Only then commit and `git push origin development`; next wait for Toni's Preview review.
+- Do not promote automatically. After Preview review, the exact `PROMOTE=FULL` token authorizes one asynchronous full-chain operation through `.github/workflows/promote.yml` (fast-forward only; failed source checks or branch divergence stop it). Do not wait for CI or workflow completion, poll status, or verify branches hop by hop.
 
 ## Non-negotiable invariants
 
