@@ -22,6 +22,4 @@ COPY backend /app/backend
 RUN mkdir -p /tmp/anclora-purgedoc && chown -R app:app /tmp/anclora-purgedoc /app
 USER app
 EXPOSE 8000
-HEALTHCHECK --interval=30s --timeout=15s --start-period=120s --retries=5 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=10)"
 CMD ["uvicorn", "backend.server:app", "--host", "0.0.0.0", "--port", "8000"]
