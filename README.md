@@ -39,6 +39,13 @@ python backend/scripts/manage_whitelist.py rotate --target usuario@empresa.com
 python backend/scripts/manage_whitelist.py revoke --target usuario@empresa.com
 ```
 
+## Endpoint de salud (`/api/health`)
+
+Neon (plan Free) suspende el cómputo tras 5 min sin actividad; una sonda que consulte la BD en cada llamada lo mantiene despierto y consume cuota.
+
+- `GET /api/health` (modo ligero, por defecto): comprueba disco temporal, Tesseract y modelos NER. **No toca la base de datos**; devuelve `"database": "skipped"` y la BD no entra en la decisión 200/503. Úsalo en `HEALTHCHECK`, Docker, reverse proxy y monitores.
+- `GET /api/health?deep=1` (o `deep=true`): además ejecuta `SELECT 1`; responde 503 si la BD falla. Úsalo solo a mano o en verificaciones puntuales de despliegue, nunca como sonda periódica.
+
 ## Puesta en Marcha Local
 
 ### Requisitos del sistema

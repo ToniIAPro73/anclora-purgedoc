@@ -218,19 +218,23 @@ class PreviewEncryptedRulesetPayload(BaseModel):
 # ----------------- Routes -----------------
 
 @api_router.get("/health")
-async def health_check():
+async def health_check(deep: bool = False):
+    # Default (light) mode never touches the database so Neon can scale to zero.
+    # Use ?deep=1 (or deep=true) to include the DB check in the 200/503 decision.
     database_configured = metadata_store.enabled
+    check_database = deep and database_configured
     checks = {
-        "database": False if database_configured else "not_configured",
+        "database": False if check_database else ("skipped" if database_configured else "not_configured"),
         "temp_root": False,
         "tesseract": False,
         "spa": "es" in detection_engine.nlp_models,
         "eng": "en" in detection_engine.nlp_models,
     }
-    try:
-        checks["database"] = metadata_store.health_check()
-    except Exception:
-        logger.exception("PurgeDoc metadata health check failed")
+    if check_database:
+        try:
+            checks["database"] = metadata_store.health_check()
+        except Exception:
+            logger.exception("PurgeDoc metadata health check failed")
     try:
         os.makedirs(TEMP_ROOT, exist_ok=True)
         with tempfile.NamedTemporaryFile(dir=TEMP_ROOT, prefix=".readiness-", delete=True):
@@ -245,7 +249,7 @@ async def health_check():
     except Exception:
         logger.exception("PurgeDoc Tesseract readiness check failed")
     required_checks = [checks["temp_root"], checks["tesseract"], checks["spa"], checks["eng"]]
-    if database_configured:
+    if check_database:
         required_checks.append(checks["database"])
     if not all(required_checks):
         from fastapi import HTTPException
