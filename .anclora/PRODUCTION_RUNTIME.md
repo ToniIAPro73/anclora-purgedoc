@@ -99,6 +99,7 @@ FastAPI backend (backend/server.py, uvicorn, port 8001 by convention)
 
 LOCAL_RUNTIME_MODEL=PRODUCTION_BACKED_METADATA_ONLY
 DATABASE_PROVIDER=Neon PostgreSQL
+DATABASE_TARGET_FINGERPRINT=sha256:596439bad71268d615f81e5fb9925770d03c8c90d1d00ad4cb6618b75ddbfca9
 DATABASE_CONTENT_SCOPE=SANITIZED_METADATA_ONLY
 PERSISTENT_STORAGE=SANITIZED_METADATA_ONLY
 EXTERNAL_AI_OR_CLOUD_CALLS=NONE
@@ -126,6 +127,10 @@ metadata schema; see the scoped exception below for the closed-access auth schem
 
 PRODUCTION_MIGRATIONS_ALLOWED=true
 MIGRATION_SYSTEM=Alembic
+MIGRATION_DIRECTORY=./backend/alembic/versions
+MIGRATION_RUNNER_WORKFLOW=.github/workflows/production-migrations.yml
+MIGRATION_ENVIRONMENT=production-migrations
+MIGRATION_CRYPTO_ATTESTATION=required
 MIGRATION_CONFIRMATION_REQUIRED=true
 
 ### Scoped migration authorization (active)
